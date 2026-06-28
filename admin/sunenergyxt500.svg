@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+	<defs>
+		<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+			<stop offset="0" stop-color="#FFC234"/>
+			<stop offset="1" stop-color="#FB8C00"/>
+		</linearGradient>
+	</defs>
+	<!-- rounded-square badge background -->
+	<rect x="0" y="0" width="256" height="256" rx="56" fill="url(#bg)"/>
+	<!-- battery terminal -->
+	<rect x="106" y="40" width="44" height="22" rx="9" fill="#ffffff"/>
+	<!-- battery / storage body -->
+	<rect x="66" y="58" width="124" height="160" rx="26" fill="#ffffff"/>
+	<!-- sun core inside the battery -->
+	<circle cx="128" cy="124" r="30" fill="#FB8C00"/>
+	<!-- sun rays -->
+	<g stroke="#FB8C00" stroke-width="11" stroke-linecap="round">
+		<line x1="128" y1="72" x2="128" y2="84"/>
+		<line x1="128" y1="176" x2="128" y2="164"/>
+		<line x1="180" y1="124" x2="168" y2="124"/>
+		<line x1="76" y1="124" x2="88" y2="124"/>
+		<line x1="165" y1="87" x2="156" y2="96"/>
+		<line x1="91" y1="161" x2="100" y2="152"/>
+		<line x1="165" y1="161" x2="156" y2="152"/>
+		<line x1="91" y1="87" x2="100" y2="96"/>
+	</g>
+</svg>
