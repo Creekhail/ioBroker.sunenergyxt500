@@ -1,0 +1,129 @@
+{
+	"common": {
+		"name": "sunenergyxt500",
+		"version": "0.1.0",
+		"news": {
+			"0.1.0": {
+				"en": "initial release",
+				"de": "Erstveröffentlichung",
+				"ru": "Начальная версия",
+				"pt": "lançamento inicial",
+				"nl": "Eerste uitgave",
+				"fr": "Première version",
+				"it": "Versione iniziale",
+				"es": "Versión inicial",
+				"pl": "Pierwsze wydanie",
+				"uk": "Початкова версія",
+				"zh-cn": "首次出版"
+			}
+		},
+		"titleLang": {
+			"en": "SunEnergyXT 500",
+			"de": "SunEnergyXT 500",
+			"ru": "SunEnergyXT 500",
+			"pt": "SunEnergyXT 500",
+			"nl": "SunEnergyXT 500",
+			"fr": "SunEnergyXT 500",
+			"it": "SunEnergyXT500",
+			"es": "SunEnergyXT 500",
+			"pl": "SunEnergyXT 500",
+			"uk": "SunEnergyXT 500",
+			"zh-cn": "SunEnergyXT 500"
+		},
+		"desc": {
+			"en": "Integration and self-consumption control for SunEnergyXT 500 / 500 PRO battery storage systems via the local HTTP API",
+			"de": "Integration und Eigenverbrauchssteuerung für SunEnergyXT 500 / 500 PRO Batteriespeichersysteme über die lokale HTTP-API",
+			"ru": "Интеграция и контроль самостоятельного потребления аккумуляторных систем хранения SunEnergyXT 500/500 PRO через локальный HTTP API",
+			"pt": "Integração e controle de autoconsumo para sistemas de armazenamento de bateria SunEnergyXT 500/500 PRO através da API HTTP local",
+			"nl": "Integratie en controle van het eigen verbruik voor SunEnergyXT 500 / 500 PRO batterijopslagsystemen via de lokale HTTP API",
+			"fr": "Intégration et contrôle de l'autoconsommation des systèmes de stockage sur batterie SunEnergyXT 500 / 500 PRO via l'API HTTP locale",
+			"it": "Integrazione e controllo dell'autoconsumo per i sistemi di accumulo a batteria SunEnergyXT 500 / 500 PRO tramite API HTTP locale",
+			"es": "Integración y control de autoconsumo de los sistemas de almacenamiento en baterías SunEnergyXT 500 / 500 PRO mediante la API HTTP local",
+			"pl": "Integracja i kontrola zużycia własnego dla systemów magazynowania energii SunEnergyXT 500 / 500 PRO za pośrednictwem lokalnego API HTTP",
+			"uk": "Інтеграція та контроль самоспоживання для систем зберігання акумуляторів SunEnergyXT 500 / 500 PRO через локальний HTTP API",
+			"zh-cn": "通过本地 HTTP API 对 SunEnergyXT 500 / 500 PRO 电池存储系统进行集成和自消耗控制"
+		},
+		"authors": [
+			"Marcus Bortel (Creekhail) <marcus@bortel.de>"
+		],
+		"keywords": [
+			"sunenergyxt",
+			"battery",
+			"storage",
+			"solar",
+			"energy",
+			"self-consumption",
+			"local-api"
+		],
+		"licenseInformation": {
+			"type": "free",
+			"license": "MIT"
+		},
+		"platform": "Javascript/Node.js",
+		"icon": "sunenergyxt500.png",
+		"enabled": true,
+		"extIcon": "https://raw.githubusercontent.com/Creekhail/ioBroker.sunenergyxt500/main/admin/sunenergyxt500.png",
+		"readme": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md",
+		"loglevel": "info",
+		"tier": 3,
+		"mode": "daemon",
+		"type": "energy",
+		"compact": true,
+		"connectionType": "local",
+		"dataSource": "poll",
+		"adminUI": {
+			"config": "json"
+		},
+		"dependencies": [
+			{
+				"js-controller": ">=6.0.11"
+			}
+		],
+		"globalDependencies": [
+			{
+				"admin": ">=7.6.17"
+			}
+		]
+	},
+	"native": {
+		"host": "",
+		"pollInterval": 5,
+		"requestTimeout": 8000,
+		"controlMode": "off",
+		"gridPowerStateId": "",
+		"gridPowerInverted": false,
+		"controllerGain": 0.3,
+		"controllerDeadBandW": 20,
+		"controllerMinIntervalMs": 5000,
+		"controllerMaxPowerW": 2400,
+		"watchdogWarnSec": 30,
+		"watchdogFailsafeSec": 180,
+		"meterType": "shellypro3em",
+		"meterId": "",
+		"meterTasmotaSubtype": ""
+	},
+	"objects": [],
+	"instanceObjects": [
+		{
+			"_id": "info",
+			"type": "channel",
+			"common": {
+				"name": "Information"
+			},
+			"native": {}
+		},
+		{
+			"_id": "info.connection",
+			"type": "state",
+			"common": {
+				"role": "indicator.connected",
+				"name": "Device or service connected",
+				"type": "boolean",
+				"read": true,
+				"write": false,
+				"def": false
+			},
+			"native": {}
+		}
+	]
+}

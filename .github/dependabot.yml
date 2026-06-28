@@ -1,0 +1,30 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: monthly
+      time: "00:05"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 15
+    assignees:
+      - Creekhail
+    versioning-strategy: increase
+    cooldown:
+      default-days: 7
+    ignore:
+      # Keep @types/node aligned with the supported Node.js runtime; do not bump majors automatically.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+      time: "00:05"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 15
+    assignees:
+      - Creekhail
+    cooldown:
+      default-days: 7
