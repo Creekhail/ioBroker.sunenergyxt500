@@ -1,8 +1,12 @@
 {
 	"common": {
 		"name": "sunenergyxt500",
-		"version": "0.1.0",
+		"version": "0.1.1",
 		"news": {
+			"0.1.1": {
+				"en": "Released via npm trusted publishing (provenance) and a package metadata fix.",
+				"de": "Veröffentlichung über npm Trusted Publishing (Provenance) und eine Paket-Metadaten-Korrektur."
+			},
 			"0.1.0": {
 				"en": "initial release",
 				"de": "Erstveröffentlichung",

@@ -156,6 +156,9 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 	### **WORK IN PROGRESS**
 -->
 
+### 0.1.1 (2026-06-29)
+* (Creekhail) Released via npm trusted publishing (provenance) and a package metadata fix.
+
 ### 0.1.0 (2026-06-28)
 * (Creekhail) Initial release: local-API polling to states; writable control fields; two switchable control modes — an adapter-side self-consumption controller (any ioBroker meter state, feed-forward + P, with watchdog/failsafe) and device self-regulation (binds a supported meter: EcoTracker / Shelly 3EM / Shelly Pro 3EM / Tasmota); plus a monitoring-only mode, with an MM-mode guard.
 
