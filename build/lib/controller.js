@@ -47,6 +47,9 @@ const controllerStateDefs = [
 ];
 const WATCHDOG_INTERVAL_MS = 15e3;
 class MultiHeadController {
+  /**
+   *
+   */
   constructor(adapter, hooks, gridStateId, cfg) {
     this.adapter = adapter;
     this.hooks = hooks;
@@ -68,6 +71,9 @@ class MultiHeadController {
     this.adapter.log.info("Multi-head controller started \u2014 all heads GS=0.");
     this.watchdogTimer = this.adapter.setInterval(() => void this.watchdogTick(), WATCHDOG_INTERVAL_MS);
   }
+  /**
+   *
+   */
   stop() {
     if (this.watchdogTimer) {
       this.adapter.clearInterval(this.watchdogTimer);

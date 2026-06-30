@@ -25,14 +25,35 @@ import type { HeadState } from './split';
 import { computeTotalTarget, splitTarget } from './split';
 import type { LocalizedName } from './states';
 
+/**
+ *
+ */
 export interface ControllerConfig {
+	/**
+	 *
+	 */
 	gain: number;
+	/**
+	 *
+	 */
 	deadBandW: number;
+	/**
+	 *
+	 */
 	minIntervalMs: number;
 	/** Minimum change of a head's setpoint before it is re-written (anti-chatter). */
 	writeDeadBandW: number;
+	/**
+	 *
+	 */
 	inverted: boolean;
+	/**
+	 *
+	 */
 	warnSec: number;
+	/**
+	 *
+	 */
 	failsafeSec: number;
 }
 
@@ -78,6 +99,9 @@ export const controllerStateDefs: {
 
 const WATCHDOG_INTERVAL_MS = 15000;
 
+/**
+ *
+ */
 export class MultiHeadController {
 	private lastWriteTime = 0;
 	private readonly lastGs = new Map<number, number>();
@@ -88,6 +112,9 @@ export class MultiHeadController {
 	private maxGapSec = 0;
 	private watchdogTimer?: ioBroker.Interval;
 
+	/**
+	 *
+	 */
 	public constructor(
 		private readonly adapter: ioBroker.Adapter,
 		private readonly hooks: ControllerHooks,
@@ -103,6 +130,9 @@ export class MultiHeadController {
 		this.watchdogTimer = this.adapter.setInterval(() => void this.watchdogTick(), WATCHDOG_INTERVAL_MS);
 	}
 
+	/**
+	 *
+	 */
 	public stop(): void {
 		if (this.watchdogTimer) {
 			this.adapter.clearInterval(this.watchdogTimer);
