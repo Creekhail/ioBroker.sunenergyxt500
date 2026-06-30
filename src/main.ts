@@ -2,36 +2,94 @@
  * Created with @iobroker/create-adapter v3.1.5
  *
  * ioBroker adapter for SunEnergyXT 500 / 500 PRO battery storage systems.
- * Polls the local HTTP API (/read), mirrors all fields to states, lets the user
- * write control fields back (/write), and optionally runs a self-consumption
- * controller on the grid setpoint (GS).
+ * Manages up to three heads in a single instance: polls each head's local HTTP
+ * API (/read), mirrors all fields to per-head states (heads.<n>.*), aggregates a
+ * combined view (total.*) and lets the user write control fields back (/write).
+ * In controller mode it runs one self-consumption loop that splits the grid
+ * setpoint across all heads; in device mode (single head) it binds a meter and
+ * lets the storage regulate itself.
  */
 
 import * as utils from '@iobroker/adapter-core';
 import type { ReportedState } from './lib/api';
 import { SunEnergyXtApi } from './lib/api';
-import type { ControllerConfig } from './lib/controller';
-import { Controller, controllerStateDefs } from './lib/controller';
-import type { StateDef } from './lib/states';
+import type { ControllerConfig, ControllerHooks } from './lib/controller';
+import { controllerStateDefs, MultiHeadController } from './lib/controller';
+import type { HeadState } from './lib/split';
+import type { LocalizedName, StateDef } from './lib/states';
 import { applyMeterModeCoupling, buildMeterMd, controlDefs, measurementDefs, roundTo } from './lib/states';
 
 /** Delay before re-reading the device to confirm a control write. */
 const WRITE_CONFIRM_DELAY_MS = 1500;
 
+/** Maximum number of heads a single instance manages. */
+const MAX_HEADS = 3;
+
+/** Aggregate (combined) states summarising all heads. */
+const AGGREGATE_DEFS: { id: string; role: string; unit?: string; name: LocalizedName }[] = [
+	{
+		id: 'total.soc',
+		role: 'value.battery',
+		unit: '%',
+		name: { en: 'Total state of charge (capacity-weighted)', de: 'Gesamt-Ladezustand (kapazitätsgewichtet)' },
+	},
+	{
+		id: 'total.batteryPower',
+		role: 'value.power',
+		unit: 'W',
+		name: { en: 'Total battery power (+charge / −discharge)', de: 'Gesamt-Batterieleistung (+laden / −entladen)' },
+	},
+	{
+		id: 'total.gridPower',
+		role: 'value.power',
+		unit: 'W',
+		name: { en: 'Total grid-port power (+feed-in)', de: 'Gesamt-Netzleistung (+Einspeisung)' },
+	},
+	{
+		id: 'total.maxPower',
+		role: 'value.power',
+		unit: 'W',
+		name: { en: 'Total available power (online heads)', de: 'Gesamt verfügbare Leistung (Online-Köpfe)' },
+	},
+	{
+		id: 'total.onlineCount',
+		role: 'value',
+		name: { en: 'Online heads', de: 'Online-Köpfe' },
+	},
+];
+
+/** Runtime state of one managed head. */
+interface HeadRuntime {
+	index: number;
+	host: string;
+	label: string;
+	api: SunEnergyXtApi;
+	online: boolean;
+	/** Latest snapshot used for the aggregates and (later) the controller split. */
+	soc?: number;
+	bp?: number;
+	gp?: number;
+	packs: number;
+	maxPower: number;
+	socMin?: number;
+	socMax?: number;
+}
+
 class Sunenergyxt500 extends utils.Adapter {
-	private api!: SunEnergyXtApi;
-	private controller?: Controller;
-	private gridStateId = '';
+	private heads: HeadRuntime[] = [];
 	private pollIntervalMs = 5000;
-	private isConnected = false;
-	/** Active control mode: off (monitoring), controller (Mode B) or device (Mode A). */
+	/** Active control mode: off (monitoring), controller (Mode B) or device (Mode A, single head). */
 	private controlMode: 'off' | 'controller' | 'device' = 'off';
 	/** Built meter-connection string (MD) for device mode; '' when unconfigured. */
 	private meterMd = '';
-	/** Whether the MM-mismatch warning was already logged (reset once consistent). */
-	private mmGuardWarned = false;
+	/** Per-head flag whether the MM-mismatch warning was already logged. */
+	private readonly mmGuardWarned = new Map<number, boolean>();
 	private pollTimer?: ioBroker.Timeout;
-	/** relative control state id → its definition */
+	/** Active multi-head controller (controller mode only). */
+	private controller?: MultiHeadController;
+	/** Foreign grid-power source state id the controller subscribes to. */
+	private gridStateId = '';
+	/** relative control state id (e.g. "control.GS") → its definition */
 	private readonly controlMap = new Map<string, StateDef>();
 
 	public constructor(options: Partial<utils.AdapterOptions> = {}) {
@@ -41,30 +99,69 @@ class Sunenergyxt500 extends utils.Adapter {
 		});
 		this.on('ready', this.onReady.bind(this));
 		this.on('stateChange', this.onStateChange.bind(this));
+		this.on('message', this.onMessage.bind(this));
 		this.on('unload', this.onUnload.bind(this));
 	}
 
 	private async onReady(): Promise<void> {
-		await this.setState('info.connection', false, true);
+		await this.setStateChangedAsync('info.connection', false, true);
 
-		const host = (this.config.host || '').trim();
-		if (!host) {
-			this.log.error('No device host/IP configured. Please set it in the adapter settings.');
+		const timeoutMs = Math.max(1000, Math.round(Number(this.config.requestTimeout) || 8000));
+		this.pollIntervalMs = Math.max(1000, Math.round((Number(this.config.pollInterval) || 5) * 1000));
+
+		const configured = [
+			{ host: this.config.head1Host, label: this.config.head1Label },
+			{ host: this.config.head2Host, label: this.config.head2Label },
+			{ host: this.config.head3Host, label: this.config.head3Label },
+		];
+		const seen = new Set<string>();
+		this.heads = [];
+		for (const c of configured) {
+			const host = (c.host || '').trim();
+			if (!host) {
+				continue;
+			}
+			const key = host.toLowerCase();
+			if (seen.has(key)) {
+				this.log.warn(`Ignoring duplicate head host "${host}".`);
+				continue;
+			}
+			seen.add(key);
+			if (this.heads.length >= MAX_HEADS) {
+				break;
+			}
+			this.heads.push({
+				index: this.heads.length + 1,
+				host,
+				label: (c.label || '').trim(),
+				api: new SunEnergyXtApi(host, timeoutMs),
+				online: false,
+				packs: 1,
+				maxPower: 2400,
+			});
+		}
+
+		if (!this.heads.length) {
+			this.log.error(
+				'No storage head configured. Please add at least one head (host/IP) in the adapter settings.',
+			);
 			return;
 		}
 
-		this.pollIntervalMs = Math.max(1000, Math.round((Number(this.config.pollInterval) || 5) * 1000));
-		const timeoutMs = Math.max(1000, Math.round(Number(this.config.requestTimeout) || 8000));
-		this.api = new SunEnergyXtApi(host, timeoutMs);
 		this.controlMode = this.config.controlMode || 'off';
+		if (this.controlMode === 'device' && this.heads.length > 1) {
+			this.log.error(
+				`Device self-regulation is only available with a single head, but ${this.heads.length} are configured — falling back to monitoring (off). Use the adapter controller for multiple heads.`,
+			);
+			this.controlMode = 'off';
+		}
 
 		for (const def of controlDefs) {
 			this.controlMap.set(def.id, def);
 		}
 
 		await this.createObjects();
-
-		this.subscribeStates('control.*');
+		this.subscribeStates('heads.*.control.*');
 
 		if (this.controlMode === 'device') {
 			this.meterMd = buildMeterMd({
@@ -79,144 +176,42 @@ class Sunenergyxt500 extends utils.Adapter {
 			}
 		}
 
-		// Bring the device into the state required by the chosen control mode before polling.
+		// Bring every head into the state required by the chosen control mode before polling.
 		await this.enforceMode('startup');
 
 		if (this.controlMode === 'controller') {
 			await this.setupController();
 		}
 
-		this.log.info(`Control mode: ${this.controlMode}. Polling ${host} every ${this.pollIntervalMs / 1000}s.`);
+		this.log.info(
+			`Control mode: ${this.controlMode}. Polling ${this.heads.length} head(s) every ${this.pollIntervalMs / 1000}s.`,
+		);
 		void this.pollLoop();
 	}
 
-	private async setupController(): Promise<void> {
-		this.gridStateId = (this.config.gridPowerStateId || '').trim();
-		if (!this.gridStateId) {
-			this.log.warn('Controller enabled but no grid-power source state configured — controller not started.');
-			return;
-		}
-		const cfg: ControllerConfig = {
-			gain: Number(this.config.controllerGain) || 0.3,
-			deadBandW: Number(this.config.controllerDeadBandW) || 20,
-			minIntervalMs: Math.max(1000, Number(this.config.controllerMinIntervalMs) || 5000),
-			maxPowerW: Number(this.config.controllerMaxPowerW) || 2400,
-			inverted: !!this.config.gridPowerInverted,
-			warnSec: Number(this.config.watchdogWarnSec) || 30,
-			failsafeSec: Number(this.config.watchdogFailsafeSec) || 180,
-		};
-		this.controller = new Controller(this, this.api, this.gridStateId, cfg);
-		await this.subscribeForeignStatesAsync(this.gridStateId);
-		await this.controller.start();
-		this.log.info(`Self-consumption controller active on grid source "${this.gridStateId}".`);
-	}
-
 	/**
-	 * Writes the device fields (MM/MD) required by the active control mode, so a
-	 * leftover or externally-set mode cannot lame the chosen control path:
-	 * controller mode needs MM=0 (device executes GS), device mode needs
-	 * MM=1 + the bound meter (MD). In "off" mode the device is left untouched —
-	 * except that the adapter releases a meter binding it created itself earlier
-	 * (tracked via info.meterBound), so switching away from device mode cleans up
-	 * after itself. A foreign binding (manufacturer app / external script) is never
-	 * touched, so "off" stays passive.
-	 *
-	 * @param reason - context shown in the log line
+	 * Creates all per-head, aggregate, controller and info objects for the current
+	 * configuration, then removes any object in this namespace that is no longer part
+	 * of the desired set (renamed/removed fields, restructures, fewer heads).
 	 */
-	private async enforceMode(reason: string): Promise<void> {
-		let payload: Record<string, string | number> | null = null;
-		let bound = false; // does the device end up with an adapter-managed meter binding?
-
-		if (this.controlMode === 'controller') {
-			payload = { MM: 0, MD: '' };
-		} else if (this.controlMode === 'device') {
-			if (!this.meterMd) {
-				return; // misconfigured — already warned, leave the device alone
-			}
-			payload = { MM: 1, MD: this.meterMd };
-			bound = true;
-		} else if (await this.isMeterBoundByAdapter()) {
-			// off mode: release only a binding THIS adapter created earlier.
-			payload = { MM: 0, MD: '' };
-			this.log.info('Releasing the adapter-managed meter binding (control mode is now off).');
-		}
-
-		if (!payload) {
-			return; // off with no adapter-managed binding — pure monitoring
-		}
-		try {
-			await this.api.write(payload);
-			if (this.controlMode !== 'off') {
-				this.log.info(`Enforced ${this.controlMode} mode (${reason}): ${JSON.stringify(payload)}.`);
-			}
-			await this.setMeterBoundByAdapter(bound);
-		} catch (e) {
-			this.log.warn(`Could not apply ${this.controlMode} mode: ${errMsg(e)}`);
-		}
-	}
-
-	/** Whether the adapter currently holds a device-native meter binding it created. */
-	private async isMeterBoundByAdapter(): Promise<boolean> {
-		const st = await this.getStateAsync('info.meterBound');
-		return !!st?.val;
-	}
-
-	/**
-	 * Persists whether the adapter currently holds a meter binding, so it can
-	 * release that binding when leaving device mode — even across restarts.
-	 *
-	 * @param bound
-	 */
-	private async setMeterBoundByAdapter(bound: boolean): Promise<void> {
-		await this.setStateAsync('info.meterBound', { val: bound, ack: true });
-	}
-
-	/**
-	 * Keeps the device's self-consumption mode (MM) consistent with the chosen
-	 * control mode on every poll. An external MM change (e.g. by another script
-	 * or the manufacturer app) would otherwise silently break control:
-	 * Mode B needs MM=0, Mode A needs MM=1. On mismatch we re-assert and warn once.
-	 *
-	 * @param data - the latest reported device state
-	 */
-	private async guardMeterMode(data: ReportedState): Promise<void> {
-		if (this.controlMode === 'off') {
-			return;
-		}
-		if (this.controlMode === 'device' && !this.meterMd) {
-			return; // unconfigured device mode — nothing to enforce
-		}
-		const want = this.controlMode === 'controller' ? 0 : 1;
-		const mm = Number(data.MM);
-		if (!Number.isFinite(mm) || mm === want) {
-			this.mmGuardWarned = false;
-			return;
-		}
-		if (!this.mmGuardWarned) {
-			this.mmGuardWarned = true;
-			this.log.warn(
-				`Device MM=${mm} does not match ${this.controlMode} mode (expected ${want}) — re-asserting. Another script or the app may be changing MM.`,
-			);
-		}
-		await this.enforceMode('guard');
-	}
-
-	/** Creates channel and state objects for all measurement, control and controller states. */
 	private async createObjects(): Promise<void> {
-		const ids = [
-			...measurementDefs.map(d => d.id),
-			...controlDefs.map(d => d.id),
-			...controllerStateDefs.map(d => d.id),
-			'info.lastUpdate',
-			'info.lastError',
-			'info.meterBound',
-		];
-		await this.ensureChannels(ids);
+		const desired = new Set<string>();
+		const defaultFor = (t: ioBroker.CommonType): string | number | boolean =>
+			t === 'string' ? '' : t === 'boolean' ? false : 0;
+		const ensure = async (id: string, common: ioBroker.StateCommon): Promise<void> => {
+			desired.add(id);
+			await this.setObjectNotExistsAsync(id, { type: 'state', common, native: {} });
+		};
 
-		for (const def of [...measurementDefs, ...controlDefs]) {
-			await this.setObjectNotExistsAsync(def.id, {
-				type: 'state',
-				common: {
+		for (const h of this.heads) {
+			const base = `heads.${h.index}`;
+			const name = h.label || `Head ${h.index}`;
+			desired.add(base);
+			await this.setObjectNotExistsAsync(base, { type: 'device', common: { name }, native: {} });
+			await this.extendObjectAsync(base, { common: { name } });
+
+			for (const def of [...measurementDefs, ...controlDefs]) {
+				await ensure(`${base}.${def.id}`, {
 					name: def.name,
 					type: def.type,
 					role: def.role,
@@ -224,78 +219,95 @@ class Sunenergyxt500 extends utils.Adapter {
 					read: true,
 					write: !!def.write,
 					states: def.states,
-					def: def.type === 'string' ? '' : def.type === 'boolean' ? false : 0,
-				},
-				native: {},
-			});
-		}
-		for (const def of controllerStateDefs) {
-			await this.setObjectNotExistsAsync(def.id, {
-				type: 'state',
-				common: {
-					name: def.name,
-					type: def.type,
-					role: def.role,
-					unit: def.unit,
-					read: true,
-					write: false,
-					def: def.type === 'string' ? '' : 0,
-				},
-				native: {},
-			});
-		}
-		await this.setObjectNotExistsAsync('info.lastUpdate', {
-			type: 'state',
-			common: {
-				name: { en: 'Last successful poll', de: 'Letzte erfolgreiche Abfrage' },
-				type: 'string',
-				role: 'date',
+					def: defaultFor(def.type),
+				});
+			}
+			await ensure(`${base}.info.online`, {
+				name: { en: 'Head reachable', de: 'Kopf erreichbar' },
+				type: 'boolean',
+				role: 'indicator.reachable',
 				read: true,
 				write: false,
-				def: '',
-			},
-			native: {},
-		});
-		await this.setObjectNotExistsAsync('info.lastError', {
-			type: 'state',
-			common: {
+				def: false,
+			});
+			await ensure(`${base}.info.lastError`, {
 				name: { en: 'Last error', de: 'Letzter Fehler' },
 				type: 'string',
 				role: 'text',
 				read: true,
 				write: false,
 				def: '',
-			},
-			native: {},
-		});
-		await this.setObjectNotExistsAsync('info.rawResponse', {
-			type: 'state',
-			common: {
+			});
+			await ensure(`${base}.info.rawResponse`, {
 				name: { en: 'Raw /read response (JSON)', de: 'Rohantwort /read (JSON)' },
 				type: 'string',
 				role: 'json',
 				read: true,
 				write: false,
 				def: '',
-			},
-			native: {},
-		});
-		await this.setObjectNotExistsAsync('info.meterBound', {
-			type: 'state',
-			common: {
-				name: { en: 'Meter bound by adapter (device mode)', de: 'Zähler vom Adapter gebunden (Geräte-Modus)' },
-				type: 'boolean',
-				role: 'indicator',
+			});
+		}
+
+		for (const def of controllerStateDefs) {
+			await ensure(def.id, {
+				name: def.name,
+				type: def.type,
+				role: def.role,
+				unit: def.unit,
 				read: true,
 				write: false,
-				def: false,
-			},
-			native: {},
+				def: defaultFor(def.type),
+			});
+		}
+
+		for (const def of AGGREGATE_DEFS) {
+			await ensure(def.id, {
+				name: def.name,
+				type: 'number',
+				role: def.role,
+				unit: def.unit,
+				read: true,
+				write: false,
+				def: 0,
+			});
+		}
+
+		// info.connection is created via instanceObjects — keep it (and its channel).
+		desired.add('info');
+		desired.add('info.connection');
+		await ensure('info.lastUpdate', {
+			name: { en: 'Last successful poll', de: 'Letzte erfolgreiche Abfrage' },
+			type: 'string',
+			role: 'date',
+			read: true,
+			write: false,
+			def: '',
 		});
+		await ensure('info.meterBound', {
+			name: { en: 'Meter bound by adapter (device mode)', de: 'Zähler vom Adapter gebunden (Geräte-Modus)' },
+			type: 'boolean',
+			role: 'indicator',
+			read: true,
+			write: false,
+			def: false,
+		});
+
+		await this.ensureChannels([...desired]);
+
+		// Everything we keep = the desired ids plus all of their ancestor paths.
+		const keep = new Set<string>();
+		for (const id of desired) {
+			keep.add(id);
+			const parts = id.split('.');
+			for (let i = 1; i < parts.length; i++) {
+				keep.add(parts.slice(0, i).join('.'));
+			}
+		}
+		await this.pruneOrphans(keep);
 	}
 
 	/**
-	 * Ensures a channel object exists for every parent path of the given state ids.
+	 * Ensures a channel object exists for every parent path of the given ids.
 	 *
 	 * @param ids
 	 */
@@ -316,15 +328,68 @@ class Sunenergyxt500 extends utils.Adapter {
 		}
 	}
 
+	/**
+	 * Deletes objects in this instance's namespace that are not part of the desired
+	 * set — the general "reconcile" step that keeps existing installs clean across
+	 * version changes, tree restructures and head-count changes.
+	 *
+	 * @param keep relative ids (states and channels) that must be preserved
+	 */
+	private async pruneOrphans(keep: Set<string>): Promise<void> {
+		let all: Record<string, ioBroker.Object>;
+		try {
+			all = await this.getAdapterObjectsAsync();
+		} catch (e) {
+			this.log.debug(`Object cleanup skipped (cannot list objects): ${errMsg(e)}`);
+			return;
+		}
+		const prefix = `${this.namespace}.`;
+		const toDelete: string[] = [];
+		for (const fullId of Object.keys(all)) {
+			const rel = fullId.startsWith(prefix) ? fullId.slice(prefix.length) : '';
+			if (!rel) {
+				continue;
+			}
+			const type = all[fullId]?.type;
+			if (type !== 'state' && type !== 'channel' && type !== 'device' && type !== 'folder') {
+				continue;
+			}
+			if (!keep.has(rel)) {
+				toDelete.push(rel);
+			}
+		}
+		if (!toDelete.length) {
+			return;
+		}
+		// Delete deepest first so a channel is empty before it is removed.
+		toDelete.sort((a, b) => b.split('.').length - a.split('.').length);
+		for (const rel of toDelete) {
+			try {
+				await this.delObjectAsync(rel);
+			} catch (e) {
+				this.log.debug(`Could not delete obsolete object ${rel}: ${errMsg(e)}`);
+			}
+		}
+		this.log.info(`Cleaned up ${toDelete.length} obsolete object(s).`);
+	}
+
 	private async pollLoop(): Promise<void> {
-		await this.readAndApply();
+		for (const h of this.heads) {
+			await this.readAndApplyHead(h);
+		}
+		await this.computeAggregates();
 		this.pollTimer = this.setTimeout(() => void this.pollLoop(), this.pollIntervalMs);
 	}
 
-	/** Reads the device once and writes all states (without rescheduling). */
-	private async readAndApply(): Promise<void> {
+	/**
+	 * Reads one head once and mirrors its fields to heads.<n>.* (without rescheduling).
+	 *
+	 * @param h the head to poll
+	 */
+	private async readAndApplyHead(h: HeadRuntime): Promise<void> {
+		const base = `heads.${h.index}`;
 		try {
-			const { reported: data, body } = await this.api.read();
+			const { reported: data, body } = await h.api.read();
 			for (const def of [...measurementDefs, ...controlDefs]) {
 				if (!def.derive && !(def.field in data)) {
 					continue;
@@ -336,47 +401,81 @@ class Sunenergyxt500 extends utils.Adapter {
 				} else if (def.type === 'number') {
 					value = roundTo(raw, def.decimals ?? 0, def.scale ?? 1);
 				}
-				// boolean control fields (RT) are write-only and not read back
 				if (value === null) {
 					continue;
 				}
+				const id = `${base}.${def.id}`;
 				if (def.write) {
-					// Writable control: confirm with ack=true so a pending command turns
-					// "acknowledged" (black in admin) once the device echoes it back — even
-					// when the value is unchanged, where setStateChanged would leave it "red".
-					await this.confirmControlState(def.id, value);
+					await this.confirmControlState(id, value);
 				} else {
-					await this.setStateChangedAsync(def.id, value, true);
+					await this.setStateChangedAsync(id, value, true);
 				}
 			}
-			// Keep the device's self-consumption mode (MM) consistent with the control mode.
-			await this.guardMeterMode(data);
-			// Keep the complete original /read response available so power users can read
-			// any unmapped field themselves, without polluting the tree with cryptic states.
-			await this.setStateChangedAsync('info.rawResponse', body, true);
-			if (!this.isConnected) {
-				this.isConnected = true;
-				await this.setState('info.connection', true, true);
+			await this.guardMeterMode(h, data);
+			await this.setStateChangedAsync(`${base}.info.rawResponse`, body, true);
+
+			h.soc = num(data.SC);
+			h.bp = num(data.BP);
+			h.gp = num(data.GP);
+			h.packs = Math.max(1, num(data.ON) ?? 1);
+			h.maxPower = num(data.MG) ?? 2400;
+			h.socMin = num(data.SI) ?? num(data.SO);
+			h.socMax = num(data.SA);
+
+			if (!h.online) {
+				h.online = true;
+				await this.setState(`${base}.info.online`, true, true);
 			}
-			await this.setStateChangedAsync('info.lastUpdate', new Date().toISOString(), true);
-			await this.setStateChangedAsync('info.lastError', '', true);
+			await this.setStateChangedAsync(`${base}.info.lastError`, '', true);
 		} catch (e) {
-			if (this.isConnected) {
-				this.isConnected = false;
-				await this.setState('info.connection', false, true);
+			if (h.online || h.soc === undefined) {
+				h.online = false;
+				await this.setStateChangedAsync(`${base}.info.online`, false, true);
 			}
-			await this.setStateChangedAsync('info.lastError', errMsg(e), true);
-			this.log.warn(`Poll failed: ${errMsg(e)}`);
+			await this.setStateChangedAsync(`${base}.info.lastError`, errMsg(e), true);
+			this.log.warn(`Head ${h.index} (${h.host}) poll failed: ${errMsg(e)}`);
+		}
+	}
+
+	/** Computes the combined view across all online heads. */
+	private async computeAggregates(): Promise<void> {
+		const online = this.heads.filter(h => h.online);
+		await this.setStateChangedAsync('total.onlineCount', online.length, true);
+		await this.setStateChangedAsync(
+			'total.gridPower',
+			Math.round(online.reduce((acc, h) => acc + (h.gp ?? 0), 0)),
+			true,
+		);
+		await this.setStateChangedAsync(
+			'total.batteryPower',
+			Math.round(online.reduce((acc, h) => acc + (h.bp ?? 0), 0)),
+			true,
+		);
+		await this.setStateChangedAsync(
+			'total.maxPower',
+			Math.round(online.reduce((acc, h) => acc + h.maxPower, 0)),
+			true,
+		);
+		const withSoc = online.filter(h => h.soc !== undefined);
+		if (withSoc.length) {
+			const weight = withSoc.reduce((acc, h) => acc + h.packs, 0) || 1;
+			const soc = withSoc.reduce((acc, h) => acc + (h.soc as number) * h.packs, 0) / weight;
+			await this.setStateChangedAsync('total.soc', Math.round(soc * 10) / 10, true);
+		}
+
+		const connected = online.length > 0;
+		await this.setStateChangedAsync('info.connection', connected, true);
+		if (connected) {
+			await this.setStateChangedAsync('info.lastUpdate', new Date().toISOString(), true);
 		}
 	}
 
 	/**
 	 * Mirrors a confirmed device value onto a writable control state with ack=true,
 	 * clearing a pending (ack=false) command once the device echoes the value back.
-	 * Only writes when something actually changes, so normal polls stay quiet.
 	 *
-	 * @param id - relative control state id
-	 * @param value - the value the device currently reports
+	 * @param id full control state id
+	 * @param value the value the device currently reports
 	 */
 	private async confirmControlState(id: string, value: string | number): Promise<void> {
 		const cur = await this.getStateAsync(id);
@@ -385,16 +484,111 @@ class Sunenergyxt500 extends utils.Adapter {
 		}
 	}
 
+	/**
+	 * Writes the device fields (MM/MD) required by the active control mode for every
+	 * head, so a leftover or externally-set mode cannot lame the chosen control path.
+	 *
+	 * @param reason context shown in the log line
+	 */
+	private async enforceMode(reason: string): Promise<void> {
+		if (this.controlMode === 'controller') {
+			for (const h of this.heads) {
+				await this.writeHead(h, { MM: 0, MD: '' }, reason);
+			}
+			await this.setMeterBoundByAdapter(false);
+		} else if (this.controlMode === 'device') {
+			const h = this.heads[0];
+			if (!h || !this.meterMd) {
+				return; // misconfigured — already warned, leave the device alone
+			}
+			await this.writeHead(h, { MM: 1, MD: this.meterMd }, reason);
+			await this.setMeterBoundByAdapter(true);
+		} else if (await this.isMeterBoundByAdapter()) {
+			// off mode: release only a binding THIS adapter created earlier (device mode).
+			const h = this.heads[0];
+			if (h) {
+				await this.writeHead(h, { MM: 0, MD: '' }, 'off-cleanup');
+			}
+			await this.setMeterBoundByAdapter(false);
+			this.log.info('Releasing the adapter-managed meter binding (control mode is now off).');
+		}
+	}
+
+	/**
+	 * Writes a payload to one head, logging the outcome without aborting the others.
+	 *
+	 * @param h the target head
+	 * @param payload device fields to write
+	 * @param reason context shown in the log line
+	 */
+	private async writeHead(h: HeadRuntime, payload: Record<string, string | number>, reason: string): Promise<void> {
+		try {
+			await h.api.write(payload);
+			if (this.controlMode !== 'off') {
+				this.log.info(
+					`Head ${h.index}: enforced ${this.controlMode} mode (${reason}): ${JSON.stringify(payload)}.`,
+				);
+			}
+		} catch (e) {
+			this.log.warn(`Head ${h.index}: could not apply ${this.controlMode} mode: ${errMsg(e)}`);
+		}
+	}
+
+	/** Whether the adapter currently holds a device-native meter binding it created. */
+	private async isMeterBoundByAdapter(): Promise<boolean> {
+		const st = await this.getStateAsync('info.meterBound');
+		return !!st?.val;
+	}
+
+	/**
+	 * Persists whether the adapter currently holds a meter binding (device mode).
+	 *
+	 * @param bound
+	 */
+	private async setMeterBoundByAdapter(bound: boolean): Promise<void> {
+		await this.setStateAsync('info.meterBound', { val: bound, ack: true });
+	}
+
+	/**
+	 * Keeps a head's self-consumption mode (MM) consistent with the chosen control
+	 * mode on every poll; re-asserts and warns once on mismatch.
+	 *
+	 * @param h the polled head
+	 * @param data its latest reported state
+	 */
+	private async guardMeterMode(h: HeadRuntime, data: ReportedState): Promise<void> {
+		if (this.controlMode === 'off') {
+			return;
+		}
+		if (this.controlMode === 'device' && (h.index !== 1 || !this.meterMd)) {
+			return;
+		}
+		const want = this.controlMode === 'controller' ? 0 : 1;
+		const mm = num(data.MM);
+		if (mm === undefined || mm === want) {
+			this.mmGuardWarned.set(h.index, false);
+			return;
+		}
+		if (!this.mmGuardWarned.get(h.index)) {
+			this.mmGuardWarned.set(h.index, true);
+			this.log.warn(
+				`Head ${h.index}: MM=${mm} does not match ${this.controlMode} mode (expected ${want}) — re-asserting. Another script or the app may be changing MM.`,
+			);
+		}
+		const payload = this.controlMode === 'controller' ? { MM: 0, MD: '' } : { MM: 1, MD: this.meterMd };
+		await this.writeHead(h, payload, 'guard');
+	}
+
 	private onStateChange(id: string, state: ioBroker.State | null | undefined): void {
 		if (!state) {
 			return;
 		}
-		// Foreign grid-power source: react to every update (Shelly writes with ack=true)
+		// Foreign grid-power source: drive the controller on every update (ack=true).
 		if (this.controller && id === this.gridStateId) {
 			void this.controller.onGridPower(Number(state.val));
 			return;
 		}
-		// Own control states: only act on user commands (ack=false)
+		// Own control states: only act on user commands (ack=false).
 		if (state.ack) {
 			return;
 		}
@@ -403,14 +597,19 @@ class Sunenergyxt500 extends utils.Adapter {
 	}
 
 	/**
-	 * Sends a writable control field to the device and confirms via a re-read.
+	 * Sends a writable control field of one head to its device and confirms via re-read.
 	 *
-	 * @param relId
-	 * @param state
+	 * @param relId relative state id, e.g. "heads.2.control.GS"
+	 * @param state the new state
 	 */
 	private async handleControlWrite(relId: string, state: ioBroker.State): Promise<void> {
-		const def = this.controlMap.get(relId);
-		if (!def) {
+		const m = /^heads\.(\d+)\.(.+)$/.exec(relId);
+		if (!m) {
+			return;
+		}
+		const def = this.controlMap.get(m[2]);
+		const h = this.heads.find(x => x.index === Number(m[1]));
+		if (!def || !h) {
 			return;
 		}
 		let payload: Record<string, string | number>;
@@ -424,7 +623,7 @@ class Sunenergyxt500 extends utils.Adapter {
 		} else {
 			const n = roundTo(state.val, 0);
 			if (n === null) {
-				this.log.warn(`Ignoring invalid value for ${def.id}: ${state.val}`);
+				this.log.warn(`Ignoring invalid value for ${relId}: ${state.val}`);
 				return;
 			}
 			payload = { [def.field]: n };
@@ -434,14 +633,53 @@ class Sunenergyxt500 extends utils.Adapter {
 		applyMeterModeCoupling(def.field, payload);
 
 		try {
-			await this.api.write(payload);
-			this.log.info(`Wrote ${JSON.stringify(payload)} to device.`);
+			await h.api.write(payload);
+			this.log.info(`Head ${h.index}: wrote ${JSON.stringify(payload)} to device.`);
 			if (def.field !== 'RT') {
-				// Confirm the effect by re-reading (device echoes most fields)
-				this.setTimeout(() => void this.readAndApply(), WRITE_CONFIRM_DELAY_MS);
+				this.setTimeout(() => void this.readAndApplyHead(h), WRITE_CONFIRM_DELAY_MS);
 			}
 		} catch (e) {
-			this.log.warn(`Write ${def.field} failed: ${errMsg(e)}`);
+			this.log.warn(`Head ${h.index}: write ${def.field} failed: ${errMsg(e)}`);
+		}
+	}
+
+	/**
+	 * Handles admin messages — currently the "test all heads" connectivity probe.
+	 *
+	 * @param obj the incoming message
+	 */
+	private async onMessage(obj: ioBroker.Message): Promise<void> {
+		if (!obj || typeof obj !== 'object' || obj.command !== 'testConnections') {
+			return;
+		}
+		const msg = (obj.message ?? {}) as { heads?: { host?: string; label?: string }[] };
+		const heads = Array.isArray(msg.heads) ? msg.heads : [];
+		const timeoutMs = Math.max(1000, Math.round(Number(this.config.requestTimeout) || 8000));
+		const lines: string[] = [];
+		let failures = 0;
+		let i = 0;
+		for (const h of heads) {
+			i++;
+			const host = (h?.host || '').trim();
+			const name = (h?.label || '').trim() || `Head ${i}`;
+			if (!host) {
+				continue; // empty optional slot
+			}
+			try {
+				const { reported } = await new SunEnergyXtApi(host, timeoutMs).read();
+				const model = asString(reported.DevType) || 'SunEnergyXT';
+				const soc = num(reported.SC);
+				lines.push(`• ${name} (${host}): OK — ${model}${soc !== undefined ? `, SoC ${soc}%` : ''}`);
+			} catch (e) {
+				failures++;
+				lines.push(`• ${name} (${host}): unreachable — ${errMsg(e)}`);
+			}
+		}
+		const text = lines.length ? lines.join('\n') : 'No head configured to test.';
+		// Show as an error (red) if anything failed or nothing was testable, else as a result (green).
+		const response = failures > 0 || !lines.length ? { error: text } : { result: text };
+		if (obj.callback) {
+			this.sendTo(obj.from, obj.command, response, obj.callback);
 		}
 	}
 
@@ -456,10 +694,71 @@ class Sunenergyxt500 extends utils.Adapter {
 			callback();
 		}
 	}
+
+	/** Starts the multi-head self-consumption controller (controller mode). */
+	private async setupController(): Promise<void> {
+		this.gridStateId = (this.config.gridPowerStateId || '').trim();
+		if (!this.gridStateId) {
+			this.log.warn(
+				'Controller mode selected but no grid-power source state configured — controller not started.',
+			);
+			return;
+		}
+		const cfg: ControllerConfig = {
+			gain: Number(this.config.controllerGain) || 0.3,
+			deadBandW: Number(this.config.controllerDeadBandW) || 20,
+			minIntervalMs: Math.max(1000, Number(this.config.controllerMinIntervalMs) || 5000),
+			writeDeadBandW: Math.max(0, Number(this.config.controllerWriteDeadBandW) || 50),
+			inverted: !!this.config.gridPowerInverted,
+			warnSec: Number(this.config.watchdogWarnSec) || 30,
+			failsafeSec: Number(this.config.watchdogFailsafeSec) || 180,
+		};
+		const hooks: ControllerHooks = {
+			getHeads: () => this.headStates(),
+			writeGs: async (index, gs) => {
+				const h = this.heads.find(x => x.index === index);
+				if (h) {
+					await h.api.write({ GS: gs });
+				}
+			},
+			reflectGs: async (index, gs) => {
+				await this.setStateChangedAsync(`heads.${index}.control.GS`, gs, true);
+			},
+		};
+		this.controller = new MultiHeadController(this, hooks, this.gridStateId, cfg);
+		await this.subscribeForeignStatesAsync(this.gridStateId);
+		await this.controller.start();
+		this.log.info(
+			`Self-consumption controller active on grid source "${this.gridStateId}" across ${this.heads.length} head(s).`,
+		);
+	}
+
+	/** Maps the current head runtime to the pure HeadState used by the controller and split. */
+	private headStates(): HeadState[] {
+		return this.heads.map(h => ({
+			index: h.index,
+			online: h.online,
+			gp: h.gp ?? 0,
+			soc: h.soc ?? 0,
+			socMin: h.socMin ?? 0,
+			socMax: h.socMax ?? 100,
+			maxPower: h.maxPower,
+		}));
+	}
 }
 
 function errMsg(e: unknown): string {
 	return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * Parses an unknown API value to a finite number, or undefined.
+ *
+ * @param value
+ */
+function num(value: unknown): number | undefined {
+	const n = Number(value);
+	return Number.isFinite(n) ? n : undefined;
 }
 
 /**

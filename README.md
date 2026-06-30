@@ -12,7 +12,7 @@
 
 ## sunenergyxt500 adapter for ioBroker
 
-Integration and self-consumption control for **SunEnergyXT 500 / 500 PRO** AC-coupled hybrid battery storage systems via the device's **local HTTP API** — no cloud account required.
+Integration and self-consumption control for **SunEnergyXT 500 / 500 PRO** AC-coupled hybrid battery storage systems via the device's **local HTTP API** — no cloud account required. One instance manages **up to three heads** (storage towers).
 
 ## Language / Sprache
 
@@ -21,43 +21,48 @@ Integration and self-consumption control for **SunEnergyXT 500 / 500 PRO** AC-co
 
 ## Features
 
+* Manages **one to three heads** in a single instance, each under its own subtree `heads.<n>.*`, plus combined `total.*` aggregates.
 * Polls the local API (`GET /read`) and mirrors all stable fields to states: SoC, battery/grid/load/PV power, per-MPPT current/voltage, daily energy counters, per-pack SoC, device/firmware info and meter status.
 * Writable control fields (`POST /write`, confirmed by re-reading), matching the official integration's control surface except fields the API docs mark as *reserved*: grid setpoint `GS`, max feed-in `IS`, SoC limits `SI`/`SA`/`SO`, self-consumption mode `MM`, meter config `MD`, timezone `TZ`, restart `RT`, max grid output `MG`, the `LFB`/`LPS`/`PM` switches and local mode `LM` (⚠️ `LM=1` blocks cloud/app control until reset). Reserved fields (e.g. `PT`, `SI1`, `SA1`) are exposed read-only only.
-* Two switchable **control modes**: an adapter-side self-consumption **controller** (writes `GS` from *any* ioBroker meter state, feed-forward + P, with watchdog/failsafe), or **device self-regulation** (binds a supported meter into the storage and lets the device control itself) — plus an **off** mode for pure monitoring.
-* Connection indicator (`info.connection`) plus `info.lastUpdate` / `info.lastError`.
-* The complete, unmodified `/read` response is kept in `info.rawResponse` (JSON), so any field the adapter does not map to a dedicated state can still be read from there.
+* Two switchable **control modes**: an adapter-side self-consumption **controller** (writes `GS` from *any* ioBroker meter state, feed-forward + P, with watchdog/failsafe) that **splits one grid setpoint across all heads**, or **device self-regulation** (binds a supported meter into a single storage and lets the device control itself) — plus an **off** mode for pure monitoring.
+* A **"Test all heads"** button in the admin checks reachability of each configured head (model + SoC) before you save.
+* Connection indicator (`info.connection`) plus `info.lastUpdate`, and per-head `online` / `lastError`.
+* The complete, unmodified `/read` response of each head is kept in `heads.<n>.info.rawResponse` (JSON), so any field the adapter does not map to a dedicated state can still be read from there.
 
 ## How this adapter works
 
-This adapter controls the storage **locally**, without the manufacturer cloud. Self-consumption can be handled in **two mutually exclusive ways** — you pick one via the **Control mode** setting:
+This adapter controls the storage **locally**, without the manufacturer cloud. A single instance manages **one to three heads** (storage towers). Self-consumption can be handled in **two mutually exclusive ways** — you pick one via the **Control mode** setting:
 
-**Mode B — Adapter controller (default-recommended, works with any meter).** ioBroker reads the current grid power from **any state you point it at** (`gridPowerStateId`) and the adapter writes the grid setpoint `GS` (feed-forward + P correction, with a watchdog). The meter can be *anything* ioBroker supports — Shelly, Tasmota, a smart-meter/Modbus adapter — **including meters the storage cannot read itself**. You provide one state holding the **net grid power in watts** (`>0` = draw, `<0` = feed-in; enable *invert source sign* if reversed; for kW / split import-export / per-phase meters compute a clean net value in a small ioBroker state first). The adapter forces `MM=0` so the device executes `GS`, and the meter stays fully usable in ioBroker.
+**Mode B — Adapter controller (default-recommended, works with any meter, 1–3 heads).** ioBroker reads the current grid power from **any state you point it at** (`gridPowerStateId`) and the adapter writes the grid setpoint `GS` (feed-forward + P correction, with a watchdog). The meter can be *anything* ioBroker supports — Shelly, Tasmota, a smart-meter/Modbus adapter — **including meters the storage cannot read itself**. You provide one state holding the **net grid power in watts** (`>0` = draw, `<0` = feed-in; enable *invert source sign* if reversed; for kW / split import-export / per-phase meters compute a clean net value in a small ioBroker state first). With more than one head, the controller computes **one** total setpoint and **splits it across the online heads** — equally, capped at each head's power, and skipping a head that is full (while charging) or empty (while discharging); its share is redistributed to the others. The adapter forces `MM=0` on every head so the devices execute `GS`, and the meter stays fully usable in ioBroker.
 
-**Mode A — Device self-regulation (supported meters).** The adapter binds a supported meter **into the storage** (`MM=1` + `MD`) and lets the **device regulate itself** — the manufacturer's own self-consumption, which may react faster than an external loop. Only four meter types are supported (EcoTracker, Shelly 3EM, Shelly Pro 3EM, Tasmota) and the meter must be reachable by the storage on the LAN. The adapter does **not** write `GS` in this mode. The binding is just mDNS/HTTP polling, so the meter **stays usable in ioBroker** — unlike the manufacturer app's meter setup, which can reconfigure the meter and remove it from ioBroker; this adapter binds directly and avoids that.
+**Mode A — Device self-regulation (supported meters, single head only).** The adapter binds a supported meter **into the storage** (`MM=1` + `MD`) and lets the **device regulate itself** — the manufacturer's own self-consumption, which may react faster than an external loop. This mode is available **only with a single head**; with two or three heads configured it cannot be selected — use the adapter controller instead. Only four meter types are supported (EcoTracker, Shelly 3EM, Shelly Pro 3EM, Tasmota) and the meter must be reachable by the storage on the LAN. The adapter does **not** write `GS` in this mode. The binding is just mDNS/HTTP polling, so the meter **stays usable in ioBroker** — unlike the manufacturer app's meter setup, which can reconfigure the meter and remove it from ioBroker; this adapter binds directly and avoids that.
 
 **Off (default, monitoring only).** The adapter never writes `MM`/`MD`/`GS`; it only polls. You can still command `control.*` states manually.
 
-In both control modes the adapter **owns `MM`**: on every poll it checks the device's `MM` against the chosen mode and re-asserts it (with a warning) if something else changed it — so a stray meter binding or an external script cannot silently disable control. Note: the device only executes a written `GS` when `MM=0`; with a meter bound (`MM=1`) it self-regulates and ignores `GS`.
+In both control modes the adapter **owns `MM`**: on every poll it checks each head's `MM` against the chosen mode and re-asserts it (with a warning) if something else changed it — so a stray meter binding or an external script cannot silently disable control. Note: a head only executes a written `GS` when `MM=0`; with a meter bound (`MM=1`) it self-regulates and ignores `GS`.
 
-**Local mode (`LM=1`) is required.** The device only serves its local HTTP API (`/read` / `/write`) when **local mode is enabled** — with it off, `/read` returns no data (confirmed on the tested firmware). Enabling local mode also switches off cloud/app remote control; consequently the manufacturer's phone app can no longer control the device.
+**Multiple heads must be on different phases.** This is the operator's electrical responsibility — the adapter does not (and cannot) verify it. The controller regulates the **net (summed)** grid power your meter reports, which is what a standard netting German bidirectional meter bills; per-phase optimisation is out of scope.
+
+**Local mode (`LM=1`) is required.** Each device only serves its local HTTP API (`/read` / `/write`) when **local mode is enabled** — with it off, `/read` returns no data (confirmed on the tested firmware). Enabling local mode also switches off cloud/app remote control; consequently the manufacturer's phone app can no longer control the device.
 
 ## Requirements
 
-* A SunEnergyXT 500 (`PK=1`, 800 W) or 500 PRO (`PK=2`, 2400 W) reachable in the local network.
-* **Local mode (`LM=1`) enabled** on the device — required for the local HTTP API to deliver values (see *How this adapter works*). This also disables cloud/app remote control.
-* A meter, depending on the control mode: for **Mode B** (adapter controller) any meter whose grid power is available as an **ioBroker state**; for **Mode A** (device self-regulation) one of the four supported meters (EcoTracker, Shelly 3EM, Shelly Pro 3EM, Tasmota) reachable by the storage on the LAN. Not needed in *Off* mode.
+* One to three SunEnergyXT 500 (`PK=1`, 800 W) or 500 PRO (`PK=2`, 2400 W) heads reachable in the local network (mixed models are fine).
+* **Local mode (`LM=1`) enabled** on each device — required for the local HTTP API to deliver values (see *How this adapter works*). This also disables cloud/app remote control.
+* A meter, depending on the control mode: for **Mode B** (adapter controller) any meter whose grid power is available as an **ioBroker state**; for **Mode A** (device self-regulation, single head) one of the four supported meters (EcoTracker, Shelly 3EM, Shelly Pro 3EM, Tasmota) reachable by the storage on the LAN. Not needed in *Off* mode.
 
 ## Installation
 
 1. In ioBroker admin open **Adapters**, search for **sunenergyxt500** and install it.
-2. After installation an instance `sunenergyxt500.0` is created. Open its settings and enter the **device IP / hostname**. Leave the **Control mode** at *Off* for pure monitoring.
-3. Save & close — the adapter starts polling and fills the object tree under `sunenergyxt500.0.*`.
+2. After installation an instance `sunenergyxt500.0` is created. Open its settings and enter the **Head 1 IP / hostname** (add **Head 2 / Head 3** if you have more heads). Leave the **Control mode** at *Off* for pure monitoring.
+3. Save & close — the adapter starts polling and fills the object tree under `sunenergyxt500.0.heads.*` (and `total.*`).
 
 ## Configuration
 
 **Connection**
-* **Device IP / hostname** — local address of the storage system.
-* **Poll interval (s)** — how often `/read` is queried (default 5 s).
+* **Head 1 IP / hostname** (required) and **Head 2 / Head 3** (optional) — local addresses of your storage heads, each with an optional label. Up to three heads are managed by this single instance. Put multiple heads on **different phases** (operator's responsibility); the adapter regulates the **net summed** grid power. The same address cannot be entered twice.
+* **Test all heads** — probes each configured head and reports model + SoC (or an error), so you can verify the addresses before saving.
+* **Poll interval (s)** — how often each head is queried via `/read` (default 5 s).
 * **Request timeout (ms)** — HTTP timeout (default 8000 ms).
 
 **Control** — pick a **Control mode**:
@@ -66,18 +71,18 @@ In both control modes the adapter **owns `MM`**: on every poll it checks the dev
 
 *Adapter controller* (Mode B) — fields:
 * **Grid-power source state** — a foreign state holding your house meter's grid power. Convention: `>0` = grid draw, `<0` = feed-in. Enable **Invert source sign** if your meter uses the opposite convention.
-* **Gain** (default 0.3), **Dead band** (W), **Min. write interval** (ms), **Max. power** (W, 2400 for the Pro / 800 for the Standard).
-* **Watchdog warn / failsafe (s)** — if the grid source goes stale, the controller logs a warning and finally forces `GS=0` (safe neutral) until the source recovers. Watchdog telemetry is exposed under `controller.*`.
+* **Gain** (default 0.3), **Dead band** (W), **Min. write interval** (ms), **Per-head write dead band** (W — minimum change of a head's setpoint before it is re-written, to avoid chatter as the split shifts). Each head's maximum power is **detected automatically** from the device (800 W for a 500, 2400 W for a 500 PRO), so mixed setups work without extra configuration.
+* **Watchdog warn / failsafe (s)** — if the grid source goes stale, the controller logs a warning and finally forces `GS=0` on **all heads** (safe neutral) until the source recovers. Watchdog telemetry is exposed under `controller.*`.
 
-The controller reads the device's actual grid power (`GP`) back before each correction, which provides natural anti-windup when the device internally limits (e.g. by SoC).
+The controller reads each device's actual grid power (`GP`) back before correcting, which provides natural anti-windup when a device internally limits (e.g. by SoC).
 
-*Device self-regulation* (Mode A) — fields:
+*Device self-regulation* (Mode A, **single head only**) — fields:
 * **Meter type** — EcoTracker / Shelly 3EM / Shelly Pro 3EM / Tasmota.
 * **Meter SN / IP** — the serial number for Shelly/Tasmota (resolved via mDNS), or the LAN IP for EcoTracker (direct). For Tasmota use the SN prefix without the last 4 characters and set the **power key** matching your energy-monitor subtype.
 
-The adapter binds the meter (`MM=1` + `MD`) and the device regulates itself; the adapter does not write `GS`. The bound meter stays usable in ioBroker.
+The adapter binds the meter (`MM=1` + `MD`) and the device regulates itself; the adapter does not write `GS`. The bound meter stays usable in ioBroker. This mode is hidden/blocked once a second or third head is configured.
 
-> **Safety:** In *Off* mode the adapter is read-only — it only polls `/read` and never writes unless you command a `control.*` state. In a control mode the adapter **enforces `MM`** for that mode and re-asserts it if changed externally; do **not** run a second `GS` writer at the same time (your own script, or the device's `MM` with a different meter), otherwise they fight over the battery.
+> **Safety:** In *Off* mode the adapter is read-only — it only polls `/read` and never writes unless you command a `control.*` state. In a control mode the adapter **enforces `MM`** on every head for that mode and re-asserts it if changed externally; do **not** run a second `GS` writer at the same time (your own script, or a device's `MM` with a different meter), otherwise they fight over the battery.
 
 ## Sign conventions
 
@@ -87,26 +92,28 @@ The adapter binds the meter (`MM=1` + `MD`) and the device regulates itself; the
 
 ## Object tree
 
-States are grouped into thematic channels. The **leaf of each object id is the device's API field code** (the entity id from the official field reference), and the bilingual object name describes it — so the tree maps 1:1 to the device's documented fields.
+Each head gets its own subtree under **`heads.<n>.*`** (`n` = 1…3), plus combined **`total.*`** aggregates and adapter-level `controller.*` / `info.*`. Within a head, states are grouped into thematic channels; the **leaf of each object id is the device's API field code** (the entity id from the official field reference), and the bilingual object name describes it — so the tree maps 1:1 to the device's documented fields.
 
 | Channel | Contents |
 |---|---|
-| `battery.*` | SoC (`SC`), battery power (`BP`), per-pack SoC (`SC0`–`SC5`), online packs (`ON`), SoC hysteresis (`SI1`/`SA1`) |
-| `grid.*` | grid power (`GP`), daily charge/feed-in energy (`GD1`/`GD2`) |
-| `load.*` | load power (`LP`), daily off-grid load energy (`LD`) |
-| `pv.*` | total PV (`PV`) and per-MPPT power/current/voltage (`mppt1`–`mppt4`) |
-| `system.*` | total input/output power (`IW`/`OP`) |
-| `device.*` | type/model/serial/status; `device.network.*` (IP, port, Wi-Fi); `device.firmware.*` (`ES`/`AS`/`DS` software, `EH`/`AH`/`DH` hardware, `BS0`–`BS5` BMS) |
-| `meter.*` | external meter status (`MS`) |
-| `ups.*` | UPS mode / grid-charge / bypass (`UO`/`UG`/`FP`) |
-| `fault.*` | fault bitmasks (`TF`/`EF`/`DF1`/`DF2`/`AF1`/`AF2`/`BF`) — only populated while a fault is active |
-| `control.*` | all **writable** fields (see below) |
-| `controller.*` | self-consumption controller telemetry |
-| `info.*` | `connection`, `lastUpdate`, `lastError`, `rawResponse` (the full raw `/read`), device `timestamp` |
+| `heads.<n>.battery.*` | SoC (`SC`), battery power (`BP`), per-pack SoC (`SC0`–`SC5`), online packs (`ON`), SoC hysteresis (`SI1`/`SA1`) |
+| `heads.<n>.grid.*` | grid power (`GP`), daily charge/feed-in energy (`GD1`/`GD2`) |
+| `heads.<n>.load.*` | load power (`LP`), daily off-grid load energy (`LD`) |
+| `heads.<n>.pv.*` | total PV (`PV`) and per-MPPT power/current/voltage (`mppt1`–`mppt4`) |
+| `heads.<n>.system.*` | total input/output power (`IW`/`OP`) |
+| `heads.<n>.device.*` | type/model/serial/status; `network.*` (IP, port, Wi-Fi); `firmware.*` (`ES`/`AS`/`DS` software, `EH`/`AH`/`DH` hardware, `BS0`–`BS5` BMS) |
+| `heads.<n>.meter.*` | external meter status (`MS`) |
+| `heads.<n>.ups.*` | UPS mode / grid-charge / bypass (`UO`/`UG`/`FP`) |
+| `heads.<n>.fault.*` | fault bitmasks (`TF`/`EF`/`DF1`/`DF2`/`AF1`/`AF2`/`BF`) — only populated while a fault is active |
+| `heads.<n>.control.*` | all **writable** fields (see below) |
+| `heads.<n>.info.*` | per-head `online`, `lastError`, `rawResponse` (the full raw `/read`) |
+| `total.*` | combined view: capacity-weighted `soc`, summed `batteryPower` / `gridPower` / `maxPower`, `onlineCount` |
+| `controller.*` | self-consumption controller telemetry (`status`, grid-source age) |
+| `info.*` | `connection` (any head reachable) and `lastUpdate` |
 
-### Writable controls (`control.*`)
+### Writable controls (`heads.<n>.control.*`)
 
-By ioBroker convention all writable fields live under `control.*`. Because that flattens their topic, this table shows what each one relates to:
+By ioBroker convention all writable fields live under each head's `control.*`. Because that flattens their topic, this table shows what each one relates to:
 
 | Object | Field | Relates to | Description |
 |---|---|---|---|
@@ -123,38 +130,44 @@ By ioBroker convention all writable fields live under `control.*`. Because that 
 | `control.LPS` | LPS | mode | Off-grid output switch |
 | `control.PM` | PM | mode | Parallel mode |
 | `control.TZ` | TZ | device | POSIX timezone |
-| `control.RT` | RT | device | Restart device (button) |
+| `control.RT` | RT | device | Restart device (button — a soft restart, **not** a full power-cycle) |
 
 > Tip: in ioBroker admin you can also filter the object list by the *writable* flag to find all controls at once.
 
-`device.PK` is derived from `DevType` on firmware that no longer reports `PK`. Reserved fields (`PT`, `SI1`, `SA1`) are exposed read-only. Fields the manufacturer dropped (`PD`, `UP`) or that are doc-only artefacts (`WT`, `BN`) are not exposed; anything unmapped is still available in `info.rawResponse`.
+`device.PK` is derived from `DevType` on firmware that no longer reports `PK`. Reserved fields (`PT`, `SI1`, `SA1`) are exposed read-only. Fields the manufacturer dropped (`PD`, `UP`) or that are doc-only artefacts (`WT`, `BN`) are not exposed; anything unmapped is still available in `heads.<n>.info.rawResponse`.
 
 ## Manual meter / mode fields (MM / MD)
 
-`MM`/`MD` are the device's own meter-based self-consumption. When you select a **Control mode**, the adapter manages them for you (Mode A sets `MM=1` + `MD`; Mode B forces `MM=0`), and its guard re-asserts the mode-appropriate `MM` on the next poll — so any manual change in a control mode is temporary.
+`MM`/`MD` are a head's own meter-based self-consumption. When you select a **Control mode**, the adapter manages them for you (Mode A sets `MM=1` + `MD` on the single head; Mode B forces `MM=0` on every head), and its guard re-asserts the mode-appropriate `MM` on the next poll — so any manual change in a control mode is temporary.
 
 The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They follow the official coupling: turning `MM` off also clears `MD`, and writing `MD` enables `MM` (non-empty) or disables it (empty). The `MD` JSON formats for the four supported meters are in the device's local API reference; in *Device self-regulation* mode the adapter builds them for you from the meter type and SN/IP.
 
 ## Limitations
 
-* **Single storage head only.** Each adapter instance monitors and controls one SunEnergyXT head (via its own IP); coordinated control of multiple heads is not supported.
+* **Up to three heads per instance.** Single-head operation is validated on real hardware; the multi-head split is covered by unit tests but, at the time of writing, **untested on a real 2–3 head installation** — feedback from multi-head setups is very welcome. *Device self-regulation* is single-head only.
+* **Heads must be on different phases** (operator's responsibility). The adapter regulates the **net summed** grid power, not per phase.
+* Per-pack balancing is handled by each head's own BMS — the adapter steers the head's overall power only and reads `battery.SC` (total) for control; it does not manage individual packs.
 * Daily energy counters (`GD1`/`GD2`/`LD`) are raw **Wh**, not kWh.
 * `MD` and `TZ` take effect immediately but are not guaranteed to be echoed back verbatim by the device — confirm by effect, not by echo.
 * **PV inputs are untested with hardware** (the reference installation runs without PV modules, so `PV1–4` are always 0). The integration and controller are PV-agnostic and complete, but PV firmware edge cases (e.g. battery full + PV surplus, UPS/bypass fields `FP`/`UG`) are unverified — feedback welcome.
 
 ## Troubleshooting
 
-* **`info.connection` stays `false` / no data:** first make sure **local mode (`LM=1`)** is enabled on the device — without it the local API returns no values. Then verify that `http://<device-ip>/read` is reachable from the ioBroker host (test with a browser or `curl`).
+* **`info.connection` stays `false` / no data:** first make sure **local mode (`LM=1`)** is enabled on the device — without it the local API returns no values. Then verify that `http://<device-ip>/read` is reachable from the ioBroker host (test with a browser or `curl`). Per head, `heads.<n>.info.online` and `heads.<n>.info.lastError` show which one fails.
 * **Nothing is being controlled:** check the **Control mode** — *Off* never writes. In *Adapter controller* set a valid **grid-power source state**; in *Device self-regulation* set a supported **meter type** and **SN/IP**.
-* **Device ignores `GS` / battery does not react:** the device only executes a written `GS` when `MM=0`. In *Adapter controller* mode the adapter enforces this; if you write `GS` manually, make sure no meter is bound (`MM=0`). With a meter bound (`MM=1`) the device self-regulates and ignores `GS`.
-* **Two controllers fight over the battery:** run only one. The adapter enforces `MM` for the selected mode — disable any external `GS` script (or the device's own `MM` with a different meter) before using a control mode.
-* **Some states stay empty (`0` / `""`):** the device only returns the fields its firmware/topology actually provides (e.g. extra packs `SC2`–`SC5`, or fault bitmasks only during a fault). The complete raw response is always available in `info.rawResponse`.
+* **Device ignores `GS` / battery does not react:** a head only executes a written `GS` when `MM=0`. In *Adapter controller* mode the adapter enforces this; if you write `GS` manually, make sure no meter is bound (`MM=0`). With a meter bound (`MM=1`) the device self-regulates and ignores `GS`.
+* **Two controllers fight over the battery:** run only one. The adapter enforces `MM` for the selected mode — disable any external `GS` script (or a device's own `MM` with a different meter) before using a control mode.
+* **Some states stay empty (`0` / `""`):** a device only returns the fields its firmware/topology actually provides (e.g. extra packs `SC2`–`SC5`, or fault bitmasks only during a fault). The complete raw response is always available in `heads.<n>.info.rawResponse`.
+* **After updating from a single-head version the tree looks wrong:** the object tree was restructured to `heads.<n>.*` in 0.2.0. The adapter removes obsolete objects automatically on start; if anything lingers, delete the old objects (or re-add the instance).
 
 ## Changelog
 <!--
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+
+### 0.2.0 (2026-06-30)
+* (Creekhail) Multi-head support: manage up to three SunEnergyXT heads in one instance. The adapter controller now computes one grid setpoint and splits it across all online heads (equal split, gated by each head's SoC headroom, with per-head power caps and overflow redistribution). New per-head object tree `heads.<n>.*` and combined `total.*` aggregates; a "Test all heads" connectivity button; device self-regulation is restricted to a single head. **The object tree was restructured — existing single-head instances should be re-created (delete the old objects / re-add the instance).**
 
 ### 0.1.1 (2026-06-29)
 * (Creekhail) Released via npm trusted publishing (provenance) and a package metadata fix.

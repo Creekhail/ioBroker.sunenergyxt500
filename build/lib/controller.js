@@ -18,10 +18,11 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var controller_exports = {};
 __export(controller_exports, {
-  Controller: () => Controller,
+  MultiHeadController: () => MultiHeadController,
   controllerStateDefs: () => controllerStateDefs
 });
 module.exports = __toCommonJS(controller_exports);
+var import_split = require("./split");
 const controllerStateDefs = [
   {
     id: "controller.status",
@@ -45,33 +46,26 @@ const controllerStateDefs = [
   }
 ];
 const WATCHDOG_INTERVAL_MS = 15e3;
-class Controller {
-  constructor(adapter, api, gridStateId, cfg) {
+class MultiHeadController {
+  constructor(adapter, hooks, gridStateId, cfg) {
     this.adapter = adapter;
-    this.api = api;
+    this.hooks = hooks;
     this.gridStateId = gridStateId;
     this.cfg = cfg;
   }
   lastWriteTime = 0;
-  lastGS = null;
+  lastGs = /* @__PURE__ */ new Map();
   writeInProgress = false;
   everSeenSource = false;
   failsafeActive = false;
   warnLogged = false;
   maxGapSec = 0;
   watchdogTimer;
-  /** Sets GS to a neutral 0 and starts the watchdog. */
+  /** Sets every head to a neutral GS=0 and starts the watchdog. */
   async start() {
-    try {
-      await this.api.write({ GS: 0 });
-      this.lastGS = 0;
-      this.lastWriteTime = Date.now();
-      await this.setGridSetpointState(0);
-      await this.adapter.setStateChangedAsync("controller.status", "ok", true);
-      this.adapter.log.info("Controller started \u2014 GS set to 0.");
-    } catch (e) {
-      this.adapter.log.warn(`Controller start error: ${errMsg(e)}`);
-    }
+    await this.writeAll(0);
+    await this.adapter.setStateChangedAsync("controller.status", "ok", true);
+    this.adapter.log.info("Multi-head controller started \u2014 all heads GS=0.");
     this.watchdogTimer = this.adapter.setInterval(() => void this.watchdogTick(), WATCHDOG_INTERVAL_MS);
   }
   stop() {
@@ -83,32 +77,29 @@ class Controller {
   /**
    * Handle a new value of the configured grid-power source state.
    *
-   * @param value
+   * @param value raw source value
    */
   async onGridPower(value) {
     if (!Number.isFinite(value)) {
       return;
     }
     this.everSeenSource = true;
-    if (this.failsafeActive) {
-      this.adapter.log.info("Grid source back \u2014 controller active again.");
-    }
     if (this.failsafeActive || this.warnLogged) {
+      if (this.failsafeActive) {
+        this.adapter.log.info("Grid source back \u2014 controller active again.");
+      }
       this.failsafeActive = false;
       this.warnLogged = false;
       await this.adapter.setStateChangedAsync("controller.status", "ok", true);
     }
-    await this.writeGS(this.normalize(value));
+    await this.regulate(this.cfg.inverted ? -value : value);
   }
   /**
-   * Normalize the source value to the convention "> 0 = grid draw".
+   * Computes the total setpoint, splits it and writes the per-head GS.
    *
-   * @param value
+   * @param gridPower normalized grid power (> 0 = draw)
    */
-  normalize(value) {
-    return this.cfg.inverted ? -value : value;
-  }
-  async writeGS(gridPower) {
+  async regulate(gridPower) {
     if (this.writeInProgress) {
       return;
     }
@@ -116,48 +107,56 @@ class Controller {
     if (now - this.lastWriteTime < this.cfg.minIntervalMs) {
       return;
     }
-    if (this.lastGS !== null && Math.abs(gridPower) < this.cfg.deadBandW) {
+    if (Math.abs(gridPower) < this.cfg.deadBandW) {
       return;
     }
+    const heads = this.hooks.getHeads().filter((h) => h.online);
+    if (!heads.length) {
+      return;
+    }
+    const totalGp = heads.reduce((acc, h) => acc + (Number.isFinite(h.gp) ? h.gp : 0), 0);
+    const sumMax = heads.reduce((acc, h) => acc + Math.abs(h.maxPower), 0);
+    const totalTarget = (0, import_split.computeTotalTarget)(totalGp, gridPower, this.cfg.gain, sumMax);
+    const setpoints = (0, import_split.splitTarget)(totalTarget, heads);
     this.writeInProgress = true;
     try {
-      const { reported } = await this.api.read();
-      const gp = Number(reported.GP);
-      if (!Number.isFinite(gp)) {
-        this.adapter.log.warn("Controller: invalid GP \u2014 no write.");
-        return;
+      let wroteAny = false;
+      for (const sp of setpoints) {
+        const prev = this.lastGs.get(sp.index);
+        if (prev !== void 0 && Math.abs(sp.gs - prev) < this.cfg.writeDeadBandW) {
+          continue;
+        }
+        await this.hooks.writeGs(sp.index, sp.gs);
+        await this.hooks.reflectGs(sp.index, sp.gs);
+        this.lastGs.set(sp.index, sp.gs);
+        wroteAny = true;
       }
-      const delta = Math.round(this.cfg.gain * gridPower);
-      const gs = clamp(gp + delta, -this.cfg.maxPowerW, this.cfg.maxPowerW);
-      if (gs === this.lastGS) {
-        return;
+      if (wroteAny) {
+        this.lastWriteTime = now;
+        this.adapter.log.debug(
+          `Total target ${totalTarget} W \u2192 ${setpoints.map((s) => `H${s.index}:${s.gs}`).join(" ")} (grid ${Math.round(gridPower)} W)`
+        );
       }
-      await this.api.write({ GS: gs });
-      this.lastGS = gs;
-      this.lastWriteTime = now;
-      await this.setGridSetpointState(gs);
-      this.adapter.log.debug(`GP=${Math.round(gp)} + \u0394=${delta} \u2192 GS=${gs} (source=${Math.round(gridPower)} W)`);
     } catch (e) {
       this.adapter.log.warn(`Controller error: ${errMsg(e)}`);
     } finally {
       this.writeInProgress = false;
     }
   }
-  async writeFailsafeGS() {
-    if (this.writeInProgress || this.lastGS === 0) {
-      return;
-    }
-    this.writeInProgress = true;
-    try {
-      await this.api.write({ GS: 0 });
-      this.lastGS = 0;
-      this.lastWriteTime = Date.now();
-      await this.setGridSetpointState(0);
-      this.adapter.log.warn("FAILSAFE \u2014 grid source stale \u2192 GS set to 0.");
-    } catch (e) {
-      this.adapter.log.warn(`Controller failsafe write error: ${errMsg(e)}`);
-    } finally {
-      this.writeInProgress = false;
+  /**
+   * Writes the same GS to every head (used for start and failsafe).
+   *
+   * @param gs setpoint to write
+   */
+  async writeAll(gs) {
+    for (const h of this.hooks.getHeads()) {
+      try {
+        await this.hooks.writeGs(h.index, gs);
+        await this.hooks.reflectGs(h.index, gs);
+        this.lastGs.set(h.index, gs);
+      } catch (e) {
+        this.adapter.log.warn(`Head ${h.index}: GS write failed: ${errMsg(e)}`);
+      }
     }
   }
   async watchdogTick() {
@@ -185,9 +184,16 @@ class Controller {
       if (!this.failsafeActive) {
         this.failsafeActive = true;
         await this.adapter.setStateChangedAsync("controller.status", "failsafe", true);
-        this.adapter.log.warn(`Grid source stale for ${Math.round(ageSec)} s \u2192 failsafe.`);
+        this.adapter.log.warn(`Grid source stale for ${Math.round(ageSec)} s \u2192 failsafe (all heads GS=0).`);
       }
-      await this.writeFailsafeGS();
+      if (!this.writeInProgress) {
+        this.writeInProgress = true;
+        try {
+          await this.writeAll(0);
+        } finally {
+          this.writeInProgress = false;
+        }
+      }
     } else if (ageSec >= this.cfg.warnSec) {
       if (!this.warnLogged) {
         this.warnLogged = true;
@@ -196,19 +202,13 @@ class Controller {
       }
     }
   }
-  async setGridSetpointState(gs) {
-    await this.adapter.setStateChangedAsync("control.GS", gs, true);
-  }
-}
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
 }
 function errMsg(e) {
   return e instanceof Error ? e.message : String(e);
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  Controller,
+  MultiHeadController,
   controllerStateDefs
 });
 //# sourceMappingURL=controller.js.map

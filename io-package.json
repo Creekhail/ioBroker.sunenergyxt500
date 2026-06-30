@@ -1,8 +1,12 @@
 {
 	"common": {
 		"name": "sunenergyxt500",
-		"version": "0.1.1",
+		"version": "0.2.0",
 		"news": {
+			"0.2.0": {
+				"en": "Multi-head support: manage up to three SunEnergyXT heads in one instance; the controller splits the grid setpoint across all heads. New per-head object tree (heads.N.*) and combined totals (total.*), plus a connection test button. Device self-regulation stays single-head only. Note: the object tree was restructured — re-create existing single-head instances.",
+				"de": "Mehrkopf-Unterstützung: bis zu drei SunEnergyXT-Köpfe in einer Instanz; der Regler verteilt den Netz-Sollwert auf alle Köpfe. Neuer Objektbaum pro Kopf (heads.N.*) und Summen (total.*), plus Verbindungs-Testknopf. Geräte-Eigenregelung nur mit einem Kopf. Hinweis: Objektbaum umstrukturiert — bestehende Einzelkopf-Instanzen neu anlegen."
+			},
 			"0.1.1": {
 				"en": "Released via npm trusted publishing (provenance) and a package metadata fix.",
 				"de": "Veröffentlichung über npm Trusted Publishing (Provenance) und eine Paket-Metadaten-Korrektur."
@@ -73,6 +77,7 @@
 		"mode": "daemon",
 		"type": "energy",
 		"compact": true,
+		"messagebox": true,
 		"connectionType": "local",
 		"dataSource": "poll",
 		"adminUI": {
@@ -90,7 +95,12 @@
 		]
 	},
 	"native": {
-		"host": "",
+		"head1Host": "",
+		"head1Label": "",
+		"head2Host": "",
+		"head2Label": "",
+		"head3Host": "",
+		"head3Label": "",
 		"pollInterval": 5,
 		"requestTimeout": 8000,
 		"controlMode": "off",
@@ -99,7 +109,7 @@
 		"controllerGain": 0.3,
 		"controllerDeadBandW": 20,
 		"controllerMinIntervalMs": 5000,
-		"controllerMaxPowerW": 2400,
+		"controllerWriteDeadBandW": 50,
 		"watchdogWarnSec": 30,
 		"watchdogFailsafeSec": 180,
 		"meterType": "shellypro3em",

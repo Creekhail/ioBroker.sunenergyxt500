@@ -6,10 +6,99 @@
 			"type": "panel",
 			"label": "Connection",
 			"items": {
-				"host": {
+				"headsHeader": {
+					"type": "header",
+					"size": 4,
+					"text": "Storage heads (1–3)",
+					"newLine": true,
+					"xs": 12,
+					"sm": 12,
+					"md": 12,
+					"lg": 12,
+					"xl": 12
+				},
+				"headsInfo": {
+					"type": "staticText",
+					"text": "Configure up to three SunEnergyXT heads managed by this instance. Head 1 is required; heads 2 and 3 are optional (leave the host empty if unused). Each must be reachable via its local HTTP API (local mode LM=1). For multiple heads put them on different phases — this is the operator's responsibility; the adapter regulates the net (summed) grid power.",
+					"newLine": true,
+					"xs": 12,
+					"sm": 12,
+					"md": 12,
+					"lg": 12,
+					"xl": 12
+				},
+				"head1Host": {
 					"type": "text",
-					"label": "Device IP / hostname",
-					"help": "Local IP or hostname of the SunEnergyXT 500 (the device must be reachable via its local HTTP API; local mode LM=1 must be enabled).",
+					"label": "Head 1 — IP / hostname",
+					"help": "Required. Local IP or hostname of the first SunEnergyXT head (local mode LM=1 must be enabled).",
+					"newLine": true,
+					"xs": 12,
+					"sm": 12,
+					"md": 6,
+					"lg": 4,
+					"xl": 4
+				},
+				"head1Label": {
+					"type": "text",
+					"label": "Head 1 — label (optional)",
+					"xs": 12,
+					"sm": 12,
+					"md": 6,
+					"lg": 4,
+					"xl": 4
+				},
+				"head2Host": {
+					"type": "text",
+					"label": "Head 2 — IP / hostname (optional)",
+					"validator": "!data.head2Host || data.head2Host !== data.head1Host",
+					"validatorErrorText": "This host is already used by another head.",
+					"validatorNoSaveOnError": true,
+					"newLine": true,
+					"xs": 12,
+					"sm": 12,
+					"md": 6,
+					"lg": 4,
+					"xl": 4
+				},
+				"head2Label": {
+					"type": "text",
+					"label": "Head 2 — label (optional)",
+					"xs": 12,
+					"sm": 12,
+					"md": 6,
+					"lg": 4,
+					"xl": 4
+				},
+				"head3Host": {
+					"type": "text",
+					"label": "Head 3 — IP / hostname (optional)",
+					"validator": "!data.head3Host || (data.head3Host !== data.head1Host && data.head3Host !== data.head2Host)",
+					"validatorErrorText": "This host is already used by another head.",
+					"validatorNoSaveOnError": true,
+					"newLine": true,
+					"xs": 12,
+					"sm": 12,
+					"md": 6,
+					"lg": 4,
+					"xl": 4
+				},
+				"head3Label": {
+					"type": "text",
+					"label": "Head 3 — label (optional)",
+					"xs": 12,
+					"sm": 12,
+					"md": 6,
+					"lg": 4,
+					"xl": 4
+				},
+				"testHeads": {
+					"type": "sendTo",
+					"label": "Test all heads",
+					"command": "testConnections",
+					"jsonData": "{\"heads\":[{\"host\":\"${data.head1Host}\",\"label\":\"${data.head1Label}\"},{\"host\":\"${data.head2Host}\",\"label\":\"${data.head2Label}\"},{\"host\":\"${data.head3Host}\",\"label\":\"${data.head3Label}\"}]}",
+					"variant": "contained",
+					"showProcessState": true,
+					"useNative": false,
 					"newLine": true,
 					"xs": 12,
 					"sm": 12,
@@ -81,7 +170,7 @@
 				},
 				"controlInfoController": {
 					"type": "staticText",
-					"text": "•  Adapter controller — ioBroker writes the grid setpoint (GS) from any meter state; works with ANY meter.",
+					"text": "•  Adapter controller — ioBroker writes the grid setpoint (GS) from any meter state and splits it across all heads; works with ANY meter and with 1–3 heads.",
 					"newLine": true,
 					"xs": 12,
 					"sm": 12,
@@ -91,7 +180,7 @@
 				},
 				"controlInfoDevice": {
 					"type": "staticText",
-					"text": "•  Device self-regulation — bind a supported meter and let the storage regulate itself.",
+					"text": "•  Device self-regulation — bind a supported meter and let the storage regulate itself (single head only).",
 					"newLine": true,
 					"xs": 12,
 					"sm": 12,
@@ -101,7 +190,7 @@
 				},
 				"controlInfoNote": {
 					"type": "staticText",
-					"text": "The two control modes are mutually exclusive; the adapter enforces the matching device mode (MM) and warns if it is changed externally. Requires local mode (LM=1) on the device.",
+					"text": "The control modes are mutually exclusive; the adapter enforces the matching device mode (MM) on every head and warns if it is changed externally. Requires local mode (LM=1) on each device.",
 					"newLine": true,
 					"xs": 12,
 					"sm": 12,
@@ -114,10 +203,13 @@
 					"label": "Control mode",
 					"options": [
 						{ "label": "Off (monitoring only)", "value": "off" },
-						{ "label": "Adapter controller (any meter)", "value": "controller" },
-						{ "label": "Device self-regulation (supported meter)", "value": "device" }
+						{ "label": "Adapter controller (any meter, 1–3 heads)", "value": "controller" },
+						{ "label": "Device self-regulation (single head)", "value": "device", "hidden": "!!data.head2Host || !!data.head3Host" }
 					],
 					"default": "off",
+					"validator": "data.controlMode !== 'device' || (!data.head2Host && !data.head3Host)",
+					"validatorErrorText": "Device self-regulation works with a single head only. Remove head 2/3, or choose the adapter controller.",
+					"validatorNoSaveOnError": true,
 					"newLine": true,
 					"xs": 12,
 					"sm": 12,
@@ -125,9 +217,20 @@
 					"lg": 4,
 					"xl": 4
 				},
+				"deviceMultiNote": {
+					"type": "staticText",
+					"text": "⚠  Device self-regulation works with a single head only. With more than one head configured this mode is ignored (the adapter stays in monitoring/off). Use the adapter controller for multiple heads.",
+					"hidden": "!(data.controlMode === 'device' && (data.head2Host || data.head3Host))",
+					"newLine": true,
+					"xs": 12,
+					"sm": 12,
+					"md": 12,
+					"lg": 12,
+					"xl": 12
+				},
 				"controllerInfo": {
 					"type": "staticText",
-					"text": "The controller writes GS using feed-forward + P correction from your grid-power meter state. The adapter forces MM=0 so the device executes GS.",
+					"text": "The controller computes one total setpoint from your grid-power meter (feed-forward + P) and splits it equally across the online heads, capped per head with overflow; a full head (charging) or empty head (discharging) drops out. The adapter forces MM=0 on every head so the devices execute GS.",
 					"hidden": "data.controlMode !== 'controller'",
 					"newLine": true,
 					"xs": 12,
@@ -139,7 +242,7 @@
 				"gridPowerStateId": {
 					"type": "objectId",
 					"label": "Grid-power source state",
-					"help": "Foreign state holding the grid power of your house meter (e.g. a Shelly). Convention: >0 = grid draw, <0 = feed-in.",
+					"help": "Foreign state holding the grid power of your house meter (e.g. a Shelly Pro 3EM total). Convention: >0 = grid draw, <0 = feed-in.",
 					"hidden": "data.controlMode !== 'controller'",
 					"newLine": true,
 					"xs": 12,
@@ -200,13 +303,13 @@
 					"lg": 2,
 					"xl": 2
 				},
-				"controllerMaxPowerW": {
+				"controllerWriteDeadBandW": {
 					"type": "number",
-					"label": "Max. power (W)",
+					"label": "Per-head write dead band (W)",
 					"min": 0,
-					"max": 2400,
-					"default": 2400,
-					"help": "2400 for the 500 Pro, 800 for the 500 Standard.",
+					"max": 500,
+					"default": 50,
+					"help": "Minimum change of a head's setpoint before it is re-written, to avoid chatter as the split shifts.",
 					"hidden": "data.controlMode !== 'controller'",
 					"xs": 12,
 					"sm": 6,
@@ -235,7 +338,7 @@
 					"min": 10,
 					"max": 7200,
 					"default": 180,
-					"help": "Set GS to 0 (neutral) if the grid source is stale for this long.",
+					"help": "Set GS to 0 (neutral) on all heads if the grid source is stale for this long.",
 					"hidden": "data.controlMode !== 'controller'",
 					"xs": 12,
 					"sm": 6,
@@ -257,7 +360,7 @@
 				},
 				"meterInfo": {
 					"type": "staticText",
-					"text": "The adapter binds this meter into the storage (MM=1 + MD) and lets the device regulate itself; it does not write GS. Only the four meter types below are supported, and the meter must be reachable by the storage on the local network. Note: the meter stays usable in ioBroker (it is only polled over HTTP).",
+					"text": "The adapter binds this meter into the (single) storage (MM=1 + MD) and lets the device regulate itself; it does not write GS. Only the four meter types below are supported, and the meter must be reachable by the storage on the local network. Note: the meter stays usable in ioBroker (it is only polled over HTTP).",
 					"hidden": "data.controlMode !== 'device'",
 					"newLine": true,
 					"xs": 12,

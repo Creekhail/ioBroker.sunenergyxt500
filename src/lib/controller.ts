@@ -1,35 +1,49 @@
 /*
- * Optional self-consumption controller (feed-forward + P correction on GS).
+ * Multi-head self-consumption controller.
  *
- * Ported from the original SunEnergyXT_regler.js. It reads a configurable foreign
- * grid-power state (e.g. a Shelly meter) and writes the GS setpoint to the device:
+ * One control loop reads a configurable foreign grid-power state (e.g. a Shelly
+ * meter) and steers up to three heads at once:
  *
- *   GS_new = GP_actual + gain * gridPower
+ *   totalTarget = clamp(ΣGP + gain * gridPower, -Σmax, +Σmax)
+ *   GS_i        = splitTarget(totalTarget, heads)   // equal split, headroom-gated
  *
- * where GP_actual is the device's reported grid power (same sign convention as GS,
- * +feed-in). Reading GP back from the device provides natural anti-windup when the
- * device internally limits (e.g. by SoC).
+ * The per-head GP/SoC/limits come from the regular poll snapshot (no extra reads).
+ * Each head is only re-written when its setpoint moved by more than a dead band, to
+ * avoid chatter as the split shifts. At N=1 this reduces to the original single-head
+ * feed-forward + P behaviour.
  *
  * Sign convention of the source state: > 0 = grid draw, < 0 = feed-in (Shelly).
  * If the configured meter uses the opposite convention, enable `inverted`.
  *
- * Watchdog: if the source state goes stale (sensor/network dead) GS would otherwise
- * freeze at its last value. Two stages:
+ * Watchdog: if the source state goes stale (sensor/network dead) the setpoints would
+ * otherwise freeze. Two stages:
  *   - from warnSec:     log + telemetry only
- *   - from failsafeSec: GS = 0 (safe neutral) until the source recovers
+ *   - from failsafeSec: GS = 0 on every head (safe neutral) until the source recovers
  */
 
-import type { SunEnergyXtApi } from './api';
+import type { HeadState } from './split';
+import { computeTotalTarget, splitTarget } from './split';
 import type { LocalizedName } from './states';
 
 export interface ControllerConfig {
 	gain: number;
 	deadBandW: number;
 	minIntervalMs: number;
-	maxPowerW: number;
+	/** Minimum change of a head's setpoint before it is re-written (anti-chatter). */
+	writeDeadBandW: number;
 	inverted: boolean;
 	warnSec: number;
 	failsafeSec: number;
+}
+
+/** I/O the controller needs from the adapter (kept abstract for testability). */
+export interface ControllerHooks {
+	/** Current per-head snapshot (online flag + fields) used for the split. */
+	getHeads(): HeadState[];
+	/** Writes a GS setpoint (W, +feed-in) to the head with the given 1-based index. */
+	writeGs(index: number, gs: number): Promise<void>;
+	/** Mirrors the commanded GS onto heads.<index>.control.GS. */
+	reflectGs(index: number, gs: number): Promise<void>;
 }
 
 /** Objects created for controller telemetry. */
@@ -64,9 +78,9 @@ export const controllerStateDefs: {
 
 const WATCHDOG_INTERVAL_MS = 15000;
 
-export class Controller {
+export class MultiHeadController {
 	private lastWriteTime = 0;
-	private lastGS: number | null = null;
+	private readonly lastGs = new Map<number, number>();
 	private writeInProgress = false;
 	private everSeenSource = false;
 	private failsafeActive = false;
@@ -76,23 +90,16 @@ export class Controller {
 
 	public constructor(
 		private readonly adapter: ioBroker.Adapter,
-		private readonly api: SunEnergyXtApi,
+		private readonly hooks: ControllerHooks,
 		private readonly gridStateId: string,
 		private readonly cfg: ControllerConfig,
 	) {}
 
-	/** Sets GS to a neutral 0 and starts the watchdog. */
+	/** Sets every head to a neutral GS=0 and starts the watchdog. */
 	public async start(): Promise<void> {
-		try {
-			await this.api.write({ GS: 0 });
-			this.lastGS = 0;
-			this.lastWriteTime = Date.now();
-			await this.setGridSetpointState(0);
-			await this.adapter.setStateChangedAsync('controller.status', 'ok', true);
-			this.adapter.log.info('Controller started — GS set to 0.');
-		} catch (e) {
-			this.adapter.log.warn(`Controller start error: ${errMsg(e)}`);
-		}
+		await this.writeAll(0);
+		await this.adapter.setStateChangedAsync('controller.status', 'ok', true);
+		this.adapter.log.info('Multi-head controller started — all heads GS=0.');
 		this.watchdogTimer = this.adapter.setInterval(() => void this.watchdogTick(), WATCHDOG_INTERVAL_MS);
 	}
 
@@ -106,35 +113,30 @@ export class Controller {
 	/**
 	 * Handle a new value of the configured grid-power source state.
 	 *
-	 * @param value
+	 * @param value raw source value
 	 */
 	public async onGridPower(value: number): Promise<void> {
 		if (!Number.isFinite(value)) {
 			return;
 		}
-		// Every source event proves the sensor is alive → reset watchdog / recover
 		this.everSeenSource = true;
-		if (this.failsafeActive) {
-			this.adapter.log.info('Grid source back — controller active again.');
-		}
 		if (this.failsafeActive || this.warnLogged) {
+			if (this.failsafeActive) {
+				this.adapter.log.info('Grid source back — controller active again.');
+			}
 			this.failsafeActive = false;
 			this.warnLogged = false;
 			await this.adapter.setStateChangedAsync('controller.status', 'ok', true);
 		}
-		await this.writeGS(this.normalize(value));
+		await this.regulate(this.cfg.inverted ? -value : value);
 	}
 
 	/**
-	 * Normalize the source value to the convention "> 0 = grid draw".
+	 * Computes the total setpoint, splits it and writes the per-head GS.
 	 *
-	 * @param value
+	 * @param gridPower normalized grid power (> 0 = draw)
 	 */
-	private normalize(value: number): number {
-		return this.cfg.inverted ? -value : value;
-	}
-
-	private async writeGS(gridPower: number): Promise<void> {
+	private async regulate(gridPower: number): Promise<void> {
 		if (this.writeInProgress) {
 			return;
 		}
@@ -142,29 +144,37 @@ export class Controller {
 		if (now - this.lastWriteTime < this.cfg.minIntervalMs) {
 			return;
 		}
-		if (this.lastGS !== null && Math.abs(gridPower) < this.cfg.deadBandW) {
+		if (Math.abs(gridPower) < this.cfg.deadBandW) {
+			return; // grid close enough to zero — nothing to correct
+		}
+		const heads = this.hooks.getHeads().filter(h => h.online);
+		if (!heads.length) {
 			return;
 		}
+		const totalGp = heads.reduce((acc, h) => acc + (Number.isFinite(h.gp) ? h.gp : 0), 0);
+		const sumMax = heads.reduce((acc, h) => acc + Math.abs(h.maxPower), 0);
+		const totalTarget = computeTotalTarget(totalGp, gridPower, this.cfg.gain, sumMax);
+		const setpoints = splitTarget(totalTarget, heads);
 
 		this.writeInProgress = true;
 		try {
-			// Read actual grid power from the device (GP: +feed-in, same sign as GS)
-			const { reported } = await this.api.read();
-			const gp = Number(reported.GP);
-			if (!Number.isFinite(gp)) {
-				this.adapter.log.warn('Controller: invalid GP — no write.');
-				return;
+			let wroteAny = false;
+			for (const sp of setpoints) {
+				const prev = this.lastGs.get(sp.index);
+				if (prev !== undefined && Math.abs(sp.gs - prev) < this.cfg.writeDeadBandW) {
+					continue;
+				}
+				await this.hooks.writeGs(sp.index, sp.gs);
+				await this.hooks.reflectGs(sp.index, sp.gs);
+				this.lastGs.set(sp.index, sp.gs);
+				wroteAny = true;
 			}
-			const delta = Math.round(this.cfg.gain * gridPower);
-			const gs = clamp(gp + delta, -this.cfg.maxPowerW, this.cfg.maxPowerW);
-			if (gs === this.lastGS) {
-				return;
+			if (wroteAny) {
+				this.lastWriteTime = now;
+				this.adapter.log.debug(
+					`Total target ${totalTarget} W → ${setpoints.map(s => `H${s.index}:${s.gs}`).join(' ')} (grid ${Math.round(gridPower)} W)`,
+				);
 			}
-			await this.api.write({ GS: gs });
-			this.lastGS = gs;
-			this.lastWriteTime = now;
-			await this.setGridSetpointState(gs);
-			this.adapter.log.debug(`GP=${Math.round(gp)} + Δ=${delta} → GS=${gs} (source=${Math.round(gridPower)} W)`);
 		} catch (e) {
 			this.adapter.log.warn(`Controller error: ${errMsg(e)}`);
 		} finally {
@@ -172,21 +182,20 @@ export class Controller {
 		}
 	}
 
-	private async writeFailsafeGS(): Promise<void> {
-		if (this.writeInProgress || this.lastGS === 0) {
-			return;
-		}
-		this.writeInProgress = true;
-		try {
-			await this.api.write({ GS: 0 });
-			this.lastGS = 0;
-			this.lastWriteTime = Date.now();
-			await this.setGridSetpointState(0);
-			this.adapter.log.warn('FAILSAFE — grid source stale → GS set to 0.');
-		} catch (e) {
-			this.adapter.log.warn(`Controller failsafe write error: ${errMsg(e)}`);
-		} finally {
-			this.writeInProgress = false;
+	/**
+	 * Writes the same GS to every head (used for start and failsafe).
+	 *
+	 * @param gs setpoint to write
+	 */
+	private async writeAll(gs: number): Promise<void> {
+		for (const h of this.hooks.getHeads()) {
+			try {
+				await this.hooks.writeGs(h.index, gs);
+				await this.hooks.reflectGs(h.index, gs);
+				this.lastGs.set(h.index, gs);
+			} catch (e) {
+				this.adapter.log.warn(`Head ${h.index}: GS write failed: ${errMsg(e)}`);
+			}
 		}
 	}
 
@@ -218,9 +227,16 @@ export class Controller {
 			if (!this.failsafeActive) {
 				this.failsafeActive = true;
 				await this.adapter.setStateChangedAsync('controller.status', 'failsafe', true);
-				this.adapter.log.warn(`Grid source stale for ${Math.round(ageSec)} s → failsafe.`);
+				this.adapter.log.warn(`Grid source stale for ${Math.round(ageSec)} s → failsafe (all heads GS=0).`);
 			}
-			await this.writeFailsafeGS();
+			if (!this.writeInProgress) {
+				this.writeInProgress = true;
+				try {
+					await this.writeAll(0);
+				} finally {
+					this.writeInProgress = false;
+				}
+			}
 		} else if (ageSec >= this.cfg.warnSec) {
 			if (!this.warnLogged) {
 				this.warnLogged = true;
@@ -229,14 +245,6 @@ export class Controller {
 			}
 		}
 	}
-
-	private async setGridSetpointState(gs: number): Promise<void> {
-		await this.adapter.setStateChangedAsync('control.GS', gs, true);
-	}
-}
-
-function clamp(v: number, min: number, max: number): number {
-	return Math.max(min, Math.min(max, v));
 }
 
 function errMsg(e: unknown): string {
