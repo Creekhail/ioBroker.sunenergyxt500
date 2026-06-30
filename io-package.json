@@ -109,7 +109,7 @@
 		"controllerGain": 0.3,
 		"controllerDeadBandW": 20,
 		"controllerMinIntervalMs": 5000,
-		"controllerWriteDeadBandW": 50,
+		"controllerWriteDeadBandW": 10,
 		"watchdogWarnSec": 30,
 		"watchdogFailsafeSec": 180,
 		"meterType": "shellypro3em",

@@ -650,7 +650,7 @@ class Sunenergyxt500 extends utils.Adapter {
       gain: Number(this.config.controllerGain) || 0.3,
       deadBandW: Number(this.config.controllerDeadBandW) || 20,
       minIntervalMs: Math.max(1e3, Number(this.config.controllerMinIntervalMs) || 5e3),
-      writeDeadBandW: Math.max(0, Number(this.config.controllerWriteDeadBandW) || 50),
+      writeDeadBandW: Math.max(0, Number(this.config.controllerWriteDeadBandW) || 10),
       inverted: !!this.config.gridPowerInverted,
       warnSec: Number(this.config.watchdogWarnSec) || 30,
       failsafeSec: Number(this.config.watchdogFailsafeSec) || 180
