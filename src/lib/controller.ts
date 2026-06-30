@@ -7,7 +7,9 @@
  *   totalTarget = clamp(ΣGP + gain * gridPower, -Σmax, +Σmax)
  *   GS_i        = splitTarget(totalTarget, heads)   // equal split, headroom-gated
  *
- * The per-head GP/SoC/limits come from the regular poll snapshot (no extra reads).
+ * Per-head SoC/limits come from the regular poll snapshot, and the feed-forward base
+ * is the last commanded GS (both avoid extra device reads; the last GS tracks each
+ * head's actual grid power because the device executes it).
  * Each head is only re-written when its setpoint moved by more than a dead band, to
  * avoid chatter as the split shifts. At N=1 this reduces to the original single-head
  * feed-forward + P behaviour.
@@ -151,9 +153,16 @@ export class MultiHeadController {
 		if (!heads.length) {
 			return;
 		}
-		const totalGp = heads.reduce((acc, h) => acc + (Number.isFinite(h.gp) ? h.gp : 0), 0);
+		// Feed-forward base: the GS we last commanded each head. Because every head
+		// executes its GS (its grid power tracks GS), this equals the current grid
+		// power without an extra read — and unlike a stale poll snapshot it lets the
+		// loop integrate to zero grid power instead of leaving a steady-state error.
+		const base = heads.reduce(
+			(acc, h) => acc + (this.lastGs.get(h.index) ?? (Number.isFinite(h.gp) ? h.gp : 0)),
+			0,
+		);
 		const sumMax = heads.reduce((acc, h) => acc + Math.abs(h.maxPower), 0);
-		const totalTarget = computeTotalTarget(totalGp, gridPower, this.cfg.gain, sumMax);
+		const totalTarget = computeTotalTarget(base, gridPower, this.cfg.gain, sumMax);
 		const setpoints = splitTarget(totalTarget, heads);
 
 		this.writeInProgress = true;

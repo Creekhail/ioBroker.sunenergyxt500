@@ -114,9 +114,15 @@ class MultiHeadController {
     if (!heads.length) {
       return;
     }
-    const totalGp = heads.reduce((acc, h) => acc + (Number.isFinite(h.gp) ? h.gp : 0), 0);
+    const base = heads.reduce(
+      (acc, h) => {
+        var _a;
+        return acc + ((_a = this.lastGs.get(h.index)) != null ? _a : Number.isFinite(h.gp) ? h.gp : 0);
+      },
+      0
+    );
     const sumMax = heads.reduce((acc, h) => acc + Math.abs(h.maxPower), 0);
-    const totalTarget = (0, import_split.computeTotalTarget)(totalGp, gridPower, this.cfg.gain, sumMax);
+    const totalTarget = (0, import_split.computeTotalTarget)(base, gridPower, this.cfg.gain, sumMax);
     const setpoints = (0, import_split.splitTarget)(totalTarget, heads);
     this.writeInProgress = true;
     try {
