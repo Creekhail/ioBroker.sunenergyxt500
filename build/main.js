@@ -672,7 +672,7 @@ class Sunenergyxt500 extends utils.Adapter {
           this.controller.stop();
           await Promise.race([
             this.neutralizeAllGs(),
-            new Promise((resolve) => setTimeout(resolve, UNLOAD_NEUTRALIZE_BUDGET_MS))
+            new Promise((resolve) => this.setTimeout(() => resolve(), UNLOAD_NEUTRALIZE_BUDGET_MS))
           ]);
         }
       } catch {

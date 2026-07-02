@@ -166,6 +166,9 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 	### **WORK IN PROGRESS**
 -->
 
+### 0.2.2 (2026-07-02)
+* (Creekhail) Repository-checker compliance: complete admin translations in all languages (including the validator messages), release notes translated into all languages, removed an unknown jsonConfig property from the test button and use the adapter-managed timer during unload.
+
 ### 0.2.1 (2026-07-01)
 * (Creekhail) Controller robustness and hardening:
   * Config values of 0 are respected (gain / dead bands) instead of silently becoming defaults.

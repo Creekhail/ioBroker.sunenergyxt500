@@ -1,6 +1,6 @@
 {
   "name": "iobroker.sunenergyxt500",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Integration and self-consumption control for SunEnergyXT 500 / 500 PRO battery storage systems via the local HTTP API",
   "author": {
     "name": "Marcus Bortel (Creekhail)",

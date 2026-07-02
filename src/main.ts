@@ -754,7 +754,7 @@ class Sunenergyxt500 extends utils.Adapter {
 					// (e.g. full-power grid charging). Best effort within a short budget.
 					await Promise.race([
 						this.neutralizeAllGs(),
-						new Promise(resolve => setTimeout(resolve, UNLOAD_NEUTRALIZE_BUDGET_MS)),
+						new Promise<void>(resolve => this.setTimeout(() => resolve(), UNLOAD_NEUTRALIZE_BUDGET_MS)),
 					]);
 				}
 			} catch {

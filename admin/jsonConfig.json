@@ -97,7 +97,6 @@
 					"command": "testConnections",
 					"jsonData": "{\"heads\":[{\"host\":\"${data.head1Host}\",\"label\":\"${data.head1Label}\"},{\"host\":\"${data.head2Host}\",\"label\":\"${data.head2Label}\"},{\"host\":\"${data.head3Host}\",\"label\":\"${data.head3Label}\"}]}",
 					"variant": "contained",
-					"showProcessState": true,
 					"useNative": false,
 					"newLine": true,
 					"xs": 12,
