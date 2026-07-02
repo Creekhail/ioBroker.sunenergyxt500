@@ -17,13 +17,42 @@ import type { ControllerConfig, ControllerHooks } from './lib/controller';
 import { controllerStateDefs, MultiHeadController } from './lib/controller';
 import type { HeadState } from './lib/split';
 import type { LocalizedName, StateDef } from './lib/states';
-import { applyMeterModeCoupling, buildMeterMd, controlDefs, measurementDefs, roundTo } from './lib/states';
+import { applyMeterModeCoupling, buildMeterMd, cfgNum, controlDefs, measurementDefs, roundTo } from './lib/states';
 
 /** Delay before re-reading the device to confirm a control write. */
 const WRITE_CONFIRM_DELAY_MS = 1500;
 
 /** Maximum number of heads a single instance manages. */
 const MAX_HEADS = 3;
+
+/** All device-field definitions (measurements + controls), precomputed once. */
+const ALL_DEFS = [...measurementDefs, ...controlDefs];
+
+/**
+ * Top-level ids this adapter manages. The startup cleanup only ever deletes below
+ * these roots, so states a user created manually in the namespace survive.
+ * Includes the pre-0.2.0 flat roots so upgrades still get cleaned up.
+ */
+const MANAGED_ROOTS = new Set([
+	'heads',
+	'total',
+	'controller',
+	'info',
+	// legacy 0.1.x flat tree
+	'battery',
+	'grid',
+	'load',
+	'pv',
+	'system',
+	'device',
+	'meter',
+	'ups',
+	'fault',
+	'control',
+]);
+
+/** Time budget for writing a neutral GS=0 to the heads during unload. */
+const UNLOAD_NEUTRALIZE_BUDGET_MS = 2000;
 
 /** Aggregate (combined) states summarising all heads. */
 const AGGREGATE_DEFS: { id: string; role: string; unit?: string; name: LocalizedName }[] = [
@@ -91,6 +120,8 @@ class Sunenergyxt500 extends utils.Adapter {
 	private gridStateId = '';
 	/** relative control state id (e.g. "control.GS") → its definition */
 	private readonly controlMap = new Map<string, StateDef>();
+	/** Last value confirmed (ack=true) per control state — avoids a DB read per field and poll. */
+	private readonly confirmedCache = new Map<string, string | number>();
 
 	public constructor(options: Partial<utils.AdapterOptions> = {}) {
 		super({
@@ -106,8 +137,8 @@ class Sunenergyxt500 extends utils.Adapter {
 	private async onReady(): Promise<void> {
 		await this.setStateChangedAsync('info.connection', false, true);
 
-		const timeoutMs = Math.max(1000, Math.round(Number(this.config.requestTimeout) || 8000));
-		this.pollIntervalMs = Math.max(1000, Math.round((Number(this.config.pollInterval) || 5) * 1000));
+		const timeoutMs = Math.max(1000, Math.round(cfgNum(this.config.requestTimeout, 8000)));
+		this.pollIntervalMs = Math.max(1000, Math.round(cfgNum(this.config.pollInterval, 5) * 1000));
 
 		const configured = [
 			{ host: this.config.head1Host, label: this.config.head1Label },
@@ -210,7 +241,7 @@ class Sunenergyxt500 extends utils.Adapter {
 			await this.setObjectNotExistsAsync(base, { type: 'device', common: { name }, native: {} });
 			await this.extendObjectAsync(base, { common: { name } });
 
-			for (const def of [...measurementDefs, ...controlDefs]) {
+			for (const def of ALL_DEFS) {
 				await ensure(`${base}.${def.id}`, {
 					name: def.name,
 					type: def.type,
@@ -350,6 +381,11 @@ class Sunenergyxt500 extends utils.Adapter {
 			if (!rel) {
 				continue;
 			}
+			// Only reconcile below roots this adapter manages — user-created objects
+			// elsewhere in the namespace are left alone.
+			if (!MANAGED_ROOTS.has(rel.split('.')[0])) {
+				continue;
+			}
 			const type = all[fullId]?.type;
 			if (type !== 'state' && type !== 'channel' && type !== 'device' && type !== 'folder') {
 				continue;
@@ -374,9 +410,9 @@ class Sunenergyxt500 extends utils.Adapter {
 	}
 
 	private async pollLoop(): Promise<void> {
-		for (const h of this.heads) {
-			await this.readAndApplyHead(h);
-		}
+		// Poll all heads in parallel so one slow/unreachable head (timeout) does not
+		// stretch the whole cycle; readAndApplyHead isolates its errors per head.
+		await Promise.all(this.heads.map(h => this.readAndApplyHead(h)));
 		await this.computeAggregates();
 		this.pollTimer = this.setTimeout(() => void this.pollLoop(), this.pollIntervalMs);
 	}
@@ -390,7 +426,7 @@ class Sunenergyxt500 extends utils.Adapter {
 		const base = `heads.${h.index}`;
 		try {
 			const { reported: data, body } = await h.api.read();
-			for (const def of [...measurementDefs, ...controlDefs]) {
+			for (const def of ALL_DEFS) {
 				if (!def.derive && !(def.field in data)) {
 					continue;
 				}
@@ -418,9 +454,15 @@ class Sunenergyxt500 extends utils.Adapter {
 			h.bp = num(data.BP);
 			h.gp = num(data.GP);
 			h.packs = Math.max(1, num(data.ON) ?? 1);
-			h.maxPower = num(data.MG) ?? 2400;
+			// MG carries the head's max grid-tied output; if missing, derive the model
+			// limit (500 → 800 W, 500 PRO → 2400 W) instead of assuming a PRO.
+			h.maxPower = num(data.MG) ?? fallbackMaxPower(data);
 			h.socMin = num(data.SI) ?? num(data.SO);
 			h.socMax = num(data.SA);
+			// Anti-windup feedback: let the controller compare commanded GS vs. actual GP.
+			if (h.gp !== undefined) {
+				this.controller?.noteReportedGp(h.index, h.gp);
+			}
 
 			if (!h.online) {
 				h.online = true;
@@ -431,6 +473,8 @@ class Sunenergyxt500 extends utils.Adapter {
 			if (h.online || h.soc === undefined) {
 				h.online = false;
 				await this.setStateChangedAsync(`${base}.info.online`, false, true);
+				// The head may reboot with GS=0 — drop the remembered setpoint.
+				this.controller?.forgetHead(h.index);
 			}
 			await this.setStateChangedAsync(`${base}.info.lastError`, errMsg(e), true);
 			this.log.warn(`Head ${h.index} (${h.host}) poll failed: ${errMsg(e)}`);
@@ -478,10 +522,16 @@ class Sunenergyxt500 extends utils.Adapter {
 	 * @param value the value the device currently reports
 	 */
 	private async confirmControlState(id: string, value: string | number): Promise<void> {
+		// Cheap in-memory shortcut: we confirmed exactly this value before and no user
+		// command invalidated it since (handleControlWrite clears the entry).
+		if (this.confirmedCache.get(id) === value) {
+			return;
+		}
 		const cur = await this.getStateAsync(id);
 		if (!cur || cur.val !== value || cur.ack !== true) {
 			await this.setStateAsync(id, { val: value, ack: true });
 		}
+		this.confirmedCache.set(id, value);
 	}
 
 	/**
@@ -612,6 +662,14 @@ class Sunenergyxt500 extends utils.Adapter {
 		if (!def || !h) {
 			return;
 		}
+		if (def.field === 'GS' && this.controller) {
+			// The controller owns GS; a manual write would fight it and desync its base.
+			this.log.warn(
+				`Head ${h.index}: ignoring manual GS write — the controller owns GS in controller mode (set the control mode to off for manual GS control).`,
+			);
+			return;
+		}
+		this.confirmedCache.delete(relId);
 		let payload: Record<string, string | number>;
 		if (def.field === 'RT') {
 			if (!state.val) {
@@ -654,7 +712,7 @@ class Sunenergyxt500 extends utils.Adapter {
 		}
 		const msg = (obj.message ?? {}) as { heads?: { host?: string; label?: string }[] };
 		const heads = Array.isArray(msg.heads) ? msg.heads : [];
-		const timeoutMs = Math.max(1000, Math.round(Number(this.config.requestTimeout) || 8000));
+		const timeoutMs = Math.max(1000, Math.round(cfgNum(this.config.requestTimeout, 8000)));
 		const lines: string[] = [];
 		let failures = 0;
 		let i = 0;
@@ -684,15 +742,43 @@ class Sunenergyxt500 extends utils.Adapter {
 	}
 
 	private onUnload(callback: () => void): void {
-		try {
-			if (this.pollTimer) {
-				this.clearTimeout(this.pollTimer);
+		void (async () => {
+			try {
+				if (this.pollTimer) {
+					this.clearTimeout(this.pollTimer);
+				}
+				if (this.controller) {
+					this.controller.stop();
+					// Leaving controller mode (stop/restart/mode change): without this the
+					// heads would keep executing the last setpoint forever, unwatched
+					// (e.g. full-power grid charging). Best effort within a short budget.
+					await Promise.race([
+						this.neutralizeAllGs(),
+						new Promise(resolve => setTimeout(resolve, UNLOAD_NEUTRALIZE_BUDGET_MS)),
+					]);
+				}
+			} catch {
+				// ignore — we must always call the callback
+			} finally {
+				callback();
 			}
-			this.controller?.stop();
-			callback();
-		} catch {
-			callback();
-		}
+		})();
+	}
+
+	/** Writes a neutral GS=0 to every reachable head (used during unload). */
+	private async neutralizeAllGs(): Promise<void> {
+		await Promise.all(
+			this.heads
+				.filter(h => h.online)
+				.map(async h => {
+					try {
+						await h.api.write({ GS: 0 });
+						this.log.info(`Head ${h.index}: GS neutralized to 0 (controller shutdown).`);
+					} catch (e) {
+						this.log.warn(`Head ${h.index}: could not neutralize GS: ${errMsg(e)}`);
+					}
+				}),
+		);
 	}
 
 	/** Starts the multi-head self-consumption controller (controller mode). */
@@ -704,14 +790,15 @@ class Sunenergyxt500 extends utils.Adapter {
 			);
 			return;
 		}
+		// cfgNum keeps explicit zeros (gain/dead bands of 0 must not become defaults).
 		const cfg: ControllerConfig = {
-			gain: Number(this.config.controllerGain) || 0.3,
-			deadBandW: Number(this.config.controllerDeadBandW) || 20,
-			minIntervalMs: Math.max(1000, Number(this.config.controllerMinIntervalMs) || 5000),
-			writeDeadBandW: Math.max(0, Number(this.config.controllerWriteDeadBandW) || 10),
+			gain: cfgNum(this.config.controllerGain, 0.3),
+			deadBandW: Math.max(0, cfgNum(this.config.controllerDeadBandW, 20)),
+			minIntervalMs: Math.max(1000, cfgNum(this.config.controllerMinIntervalMs, 5000)),
+			writeDeadBandW: Math.max(0, cfgNum(this.config.controllerWriteDeadBandW, 10)),
 			inverted: !!this.config.gridPowerInverted,
-			warnSec: Number(this.config.watchdogWarnSec) || 30,
-			failsafeSec: Number(this.config.watchdogFailsafeSec) || 180,
+			warnSec: Math.max(5, cfgNum(this.config.watchdogWarnSec, 30)),
+			failsafeSec: Math.max(10, cfgNum(this.config.watchdogFailsafeSec, 180)),
 		};
 		const hooks: ControllerHooks = {
 			getHeads: () => this.headStates(),
@@ -722,7 +809,10 @@ class Sunenergyxt500 extends utils.Adapter {
 				}
 			},
 			reflectGs: async (index, gs) => {
-				await this.setStateChangedAsync(`heads.${index}.control.GS`, gs, true);
+				const id = `heads.${index}.control.GS`;
+				await this.setStateChangedAsync(id, gs, true);
+				// Keep the confirm cache in sync so the next poll does not re-write it.
+				this.confirmedCache.set(id, gs);
 			},
 		};
 		this.controller = new MultiHeadController(this, hooks, this.gridStateId, cfg);
@@ -749,6 +839,27 @@ class Sunenergyxt500 extends utils.Adapter {
 
 function errMsg(e: unknown): string {
 	return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * Model-based power limit used when the device does not report MG:
+ * 500 (PK=1) → 800 W, 500 PRO (PK=2) → 2400 W; unknown models assume a PRO.
+ *
+ * @param data the head's reported state
+ */
+function fallbackMaxPower(data: ReportedState): number {
+	const pk = num(data.PK);
+	if (pk === 1) {
+		return 800;
+	}
+	if (pk === 2) {
+		return 2400;
+	}
+	const devType = typeof data.DevType === 'string' ? data.DevType : '';
+	if (devType && !/pro/i.test(devType)) {
+		return 800;
+	}
+	return 2400;
 }
 
 /**
