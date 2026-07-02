@@ -1,8 +1,21 @@
 {
 	"common": {
 		"name": "sunenergyxt500",
-		"version": "0.2.3",
+		"version": "0.2.4",
 		"news": {
+			"0.2.4": {
+				"en": "State names are now provided in all ioBroker languages (hand-written English/German, machine-translated otherwise).",
+				"de": "State-Namen liegen jetzt in allen ioBroker-Sprachen vor (Englisch/Deutsch handgeschrieben, übrige maschinell übersetzt).",
+				"ru": "Названия состояний теперь предоставляются на всех языках ioBroker (рукописный английский/немецкий, в противном случае — машинный перевод).",
+				"pt": "Os nomes dos estados agora são fornecidos em todos os idiomas do ioBroker (escritos à mão em inglês/alemão, caso contrário, traduzidos automaticamente).",
+				"nl": "Staatsnamen worden nu in alle ioBroker-talen aangeboden (handgeschreven Engels/Duits, anders machinaal vertaald).",
+				"fr": "Les noms d'État sont désormais fournis dans toutes les langues d'ioBroker (anglais/allemand écrits à la main, sinon traduits automatiquement).",
+				"it": "I nomi degli stati sono ora forniti in tutte le lingue di ioBroker (inglese/tedesco scritti a mano, altrimenti tradotti automaticamente).",
+				"es": "Los nombres de los estados ahora se proporcionan en todos los idiomas de ioBroker (escritos a mano en inglés/alemán, en caso contrario traducidos automáticamente).",
+				"pl": "Nazwy stanów są teraz dostępne we wszystkich językach ioBroker (pisane ręcznie w języku angielskim/niemieckim, w przeciwnym razie tłumaczone maszynowo).",
+				"uk": "Назви штатів тепер надаються всіма мовами ioBroker (написані від руки англійською/німецькою, інакше – з машинним перекладом).",
+				"zh-cn": "现在以所有 ioBroker 语言提供状态名称（手写英语/德语，否则由机器翻译）。"
+			},
 			"0.2.3": {
 				"en": "Object-tree compliance for the repository review: the heads container is now a folder (device→channel→state order), the switch states MM/LM/LFB/LPS/PM are real booleans (previously 0/1 numbers — adjust scripts that use them), corrected roles for GS/IS/MG and the UPS mode; object definitions now also update in place on existing installations.",
 				"de": "Objektbaum-Konformität für das Repository-Review: der heads-Container ist jetzt ein Ordner (device→channel→state-Reihenfolge), die Schalter-States MM/LM/LFB/LPS/PM sind echte Booleans (vorher 0/1-Zahlen — Skripte, die sie nutzen, anpassen), korrigierte Rollen für GS/IS/MG und den USV-Modus; Objektdefinitionen aktualisieren sich jetzt auch auf bestehenden Installationen.",

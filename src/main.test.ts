@@ -3,7 +3,25 @@
  */
 
 import { expect } from 'chai';
+import { controllerStateDefs } from './lib/controller';
+import { NAME_TRANSLATIONS } from './lib/name-translations';
 import { applyMeterModeCoupling, buildMeterMd, cfgNum, controlDefs, measurementDefs, roundTo } from './lib/states';
+
+describe('state name translations', () => {
+	const LANGS = ['ru', 'pt', 'nl', 'fr', 'it', 'es', 'pl', 'uk', 'zh-cn'];
+
+	it('cover every state definition name in all recommended languages', () => {
+		// Guard: regenerate name-translations.ts after adding or renaming states
+		// (scratchpad script gen-name-translations.js).
+		for (const def of [...measurementDefs, ...controlDefs, ...controllerStateDefs]) {
+			const entry = NAME_TRANSLATIONS[def.name.en];
+			expect(entry, `missing translations for "${def.name.en}"`).to.be.an('object');
+			for (const lang of LANGS) {
+				expect(entry[lang], `missing ${lang} for "${def.name.en}"`).to.be.a('string').and.not.equal('');
+			}
+		}
+	});
+});
 
 describe('cfgNum', () => {
 	it('respects an explicit zero instead of falling back to the default', () => {

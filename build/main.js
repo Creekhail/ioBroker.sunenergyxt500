@@ -24,6 +24,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var utils = __toESM(require("@iobroker/adapter-core"));
 var import_api = require("./lib/api");
 var import_controller = require("./lib/controller");
+var import_name_translations = require("./lib/name-translations");
 var import_states = require("./lib/states");
 const WRITE_CONFIRM_DELAY_MS = 1500;
 const MAX_HEADS = 3;
@@ -46,6 +47,10 @@ const MANAGED_ROOTS = /* @__PURE__ */ new Set([
   "control"
 ]);
 const UNLOAD_NEUTRALIZE_BUDGET_MS = 2e3;
+function loc(name) {
+  var _a;
+  return { ...(_a = import_name_translations.NAME_TRANSLATIONS[name.en]) != null ? _a : {}, ...name };
+}
 const AGGREGATE_DEFS = [
   {
     id: "total.soc",
@@ -206,7 +211,7 @@ class Sunenergyxt500 extends utils.Adapter {
       await this.extendObjectAsync(base, { common: { name } });
       for (const def of ALL_DEFS) {
         await ensure(`${base}.${def.id}`, {
-          name: def.name,
+          name: loc(def.name),
           type: def.type,
           role: def.role,
           unit: def.unit,
@@ -217,7 +222,7 @@ class Sunenergyxt500 extends utils.Adapter {
         });
       }
       await ensure(`${base}.info.online`, {
-        name: { en: "Head reachable", de: "Kopf erreichbar" },
+        name: loc({ en: "Head reachable", de: "Kopf erreichbar" }),
         type: "boolean",
         role: "indicator.reachable",
         read: true,
@@ -225,7 +230,7 @@ class Sunenergyxt500 extends utils.Adapter {
         def: false
       });
       await ensure(`${base}.info.lastError`, {
-        name: { en: "Last error", de: "Letzter Fehler" },
+        name: loc({ en: "Last error", de: "Letzter Fehler" }),
         type: "string",
         role: "text",
         read: true,
@@ -233,7 +238,7 @@ class Sunenergyxt500 extends utils.Adapter {
         def: ""
       });
       await ensure(`${base}.info.rawResponse`, {
-        name: { en: "Raw /read response (JSON)", de: "Rohantwort /read (JSON)" },
+        name: loc({ en: "Raw /read response (JSON)", de: "Rohantwort /read (JSON)" }),
         type: "string",
         role: "json",
         read: true,
@@ -243,7 +248,7 @@ class Sunenergyxt500 extends utils.Adapter {
     }
     for (const def of import_controller.controllerStateDefs) {
       await ensure(def.id, {
-        name: def.name,
+        name: loc(def.name),
         type: def.type,
         role: def.role,
         unit: def.unit,
@@ -254,7 +259,7 @@ class Sunenergyxt500 extends utils.Adapter {
     }
     for (const def of AGGREGATE_DEFS) {
       await ensure(def.id, {
-        name: def.name,
+        name: loc(def.name),
         type: "number",
         role: def.role,
         unit: def.unit,
@@ -266,7 +271,7 @@ class Sunenergyxt500 extends utils.Adapter {
     desired.add("info");
     desired.add("info.connection");
     await ensure("info.lastUpdate", {
-      name: { en: "Last successful poll", de: "Letzte erfolgreiche Abfrage" },
+      name: loc({ en: "Last successful poll", de: "Letzte erfolgreiche Abfrage" }),
       type: "string",
       role: "date",
       read: true,
@@ -274,7 +279,7 @@ class Sunenergyxt500 extends utils.Adapter {
       def: ""
     });
     await ensure("info.meterBound", {
-      name: { en: "Meter bound by adapter (device mode)", de: "Z\xE4hler vom Adapter gebunden (Ger\xE4te-Modus)" },
+      name: loc({ en: "Meter bound by adapter (device mode)", de: "Z\xE4hler vom Adapter gebunden (Ger\xE4te-Modus)" }),
       type: "boolean",
       role: "indicator",
       read: true,

@@ -15,6 +15,7 @@ import type { ReportedState } from './lib/api';
 import { SunEnergyXtApi } from './lib/api';
 import type { ControllerConfig, ControllerHooks } from './lib/controller';
 import { controllerStateDefs, MultiHeadController } from './lib/controller';
+import { NAME_TRANSLATIONS } from './lib/name-translations';
 import type { HeadState } from './lib/split';
 import type { LocalizedName, StateDef } from './lib/states';
 import { applyMeterModeCoupling, buildMeterMd, cfgNum, controlDefs, measurementDefs, roundTo } from './lib/states';
@@ -53,6 +54,16 @@ const MANAGED_ROOTS = new Set([
 
 /** Time budget for writing a neutral GS=0 to the heads during unload. */
 const UNLOAD_NEUTRALIZE_BUDGET_MS = 2000;
+
+/**
+ * Expands a hand-written en/de name with the generated machine translations for the
+ * other ioBroker languages (en/de take precedence over the generated entries).
+ *
+ * @param name the hand-written bilingual name
+ */
+function loc(name: LocalizedName): ioBroker.Translated {
+	return { ...(NAME_TRANSLATIONS[name.en] ?? {}), ...name };
+}
 
 /** Aggregate (combined) states summarising all heads. */
 const AGGREGATE_DEFS: { id: string; role: string; unit?: string; name: LocalizedName }[] = [
@@ -256,7 +267,7 @@ class Sunenergyxt500 extends utils.Adapter {
 
 			for (const def of ALL_DEFS) {
 				await ensure(`${base}.${def.id}`, {
-					name: def.name,
+					name: loc(def.name),
 					type: def.type,
 					role: def.role,
 					unit: def.unit,
@@ -267,7 +278,7 @@ class Sunenergyxt500 extends utils.Adapter {
 				});
 			}
 			await ensure(`${base}.info.online`, {
-				name: { en: 'Head reachable', de: 'Kopf erreichbar' },
+				name: loc({ en: 'Head reachable', de: 'Kopf erreichbar' }),
 				type: 'boolean',
 				role: 'indicator.reachable',
 				read: true,
@@ -275,7 +286,7 @@ class Sunenergyxt500 extends utils.Adapter {
 				def: false,
 			});
 			await ensure(`${base}.info.lastError`, {
-				name: { en: 'Last error', de: 'Letzter Fehler' },
+				name: loc({ en: 'Last error', de: 'Letzter Fehler' }),
 				type: 'string',
 				role: 'text',
 				read: true,
@@ -283,7 +294,7 @@ class Sunenergyxt500 extends utils.Adapter {
 				def: '',
 			});
 			await ensure(`${base}.info.rawResponse`, {
-				name: { en: 'Raw /read response (JSON)', de: 'Rohantwort /read (JSON)' },
+				name: loc({ en: 'Raw /read response (JSON)', de: 'Rohantwort /read (JSON)' }),
 				type: 'string',
 				role: 'json',
 				read: true,
@@ -294,7 +305,7 @@ class Sunenergyxt500 extends utils.Adapter {
 
 		for (const def of controllerStateDefs) {
 			await ensure(def.id, {
-				name: def.name,
+				name: loc(def.name),
 				type: def.type,
 				role: def.role,
 				unit: def.unit,
@@ -306,7 +317,7 @@ class Sunenergyxt500 extends utils.Adapter {
 
 		for (const def of AGGREGATE_DEFS) {
 			await ensure(def.id, {
-				name: def.name,
+				name: loc(def.name),
 				type: 'number',
 				role: def.role,
 				unit: def.unit,
@@ -320,7 +331,7 @@ class Sunenergyxt500 extends utils.Adapter {
 		desired.add('info');
 		desired.add('info.connection');
 		await ensure('info.lastUpdate', {
-			name: { en: 'Last successful poll', de: 'Letzte erfolgreiche Abfrage' },
+			name: loc({ en: 'Last successful poll', de: 'Letzte erfolgreiche Abfrage' }),
 			type: 'string',
 			role: 'date',
 			read: true,
@@ -328,7 +339,7 @@ class Sunenergyxt500 extends utils.Adapter {
 			def: '',
 		});
 		await ensure('info.meterBound', {
-			name: { en: 'Meter bound by adapter (device mode)', de: 'Zähler vom Adapter gebunden (Geräte-Modus)' },
+			name: loc({ en: 'Meter bound by adapter (device mode)', de: 'Zähler vom Adapter gebunden (Geräte-Modus)' }),
 			type: 'boolean',
 			role: 'indicator',
 			read: true,

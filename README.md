@@ -166,6 +166,9 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 	### **WORK IN PROGRESS**
 -->
 
+### 0.2.4 (2026-07-02)
+* (Creekhail) State names are now provided in all ioBroker languages: English and German stay hand-written, the other languages are machine-translated (generated file, merged at object creation; existing installations are updated in place).
+
 ### 0.2.3 (2026-07-02)
 * (Creekhail) Object-tree compliance for the repository review:
   * The `heads` container is now a **folder** so the hierarchy follows the required device→channel→state order.
