@@ -864,3 +864,19 @@ export function roundTo(value: unknown, decimals = 0, scale = 1): number | null 
 	const factor = Math.pow(10, decimals);
 	return Math.round(n * factor) / factor;
 }
+
+/**
+ * Reads a numeric config value, falling back to a default only when the value is
+ * missing or not a number. Unlike `Number(x) || def`, an explicit 0 is respected
+ * (e.g. a dead band of 0 must stay 0 and not silently become the default).
+ *
+ * @param value raw config value
+ * @param def default when the value is unset or invalid
+ */
+export function cfgNum(value: unknown, def: number): number {
+	if (value === null || value === undefined || value === '') {
+		return def;
+	}
+	const n = Number(value);
+	return Number.isFinite(n) ? n : def;
+}

@@ -3,7 +3,27 @@
  */
 
 import { expect } from 'chai';
-import { applyMeterModeCoupling, buildMeterMd, controlDefs, measurementDefs, roundTo } from './lib/states';
+import { applyMeterModeCoupling, buildMeterMd, cfgNum, controlDefs, measurementDefs, roundTo } from './lib/states';
+
+describe('cfgNum', () => {
+	it('respects an explicit zero instead of falling back to the default', () => {
+		expect(cfgNum(0, 10)).to.equal(0);
+		expect(cfgNum('0', 10)).to.equal(0);
+	});
+
+	it('falls back for missing or invalid values', () => {
+		expect(cfgNum(undefined, 10)).to.equal(10);
+		expect(cfgNum(null, 10)).to.equal(10);
+		expect(cfgNum('', 10)).to.equal(10);
+		expect(cfgNum('abc', 10)).to.equal(10);
+		expect(cfgNum(NaN, 10)).to.equal(10);
+	});
+
+	it('parses numeric strings and keeps real numbers', () => {
+		expect(cfgNum('5', 10)).to.equal(5);
+		expect(cfgNum(0.3, 1)).to.equal(0.3);
+	});
+});
 
 describe('roundTo', () => {
 	it('rounds to integer by default', () => {
