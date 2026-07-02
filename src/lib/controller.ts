@@ -80,6 +80,14 @@ export const controllerStateDefs: {
 
 const WATCHDOG_INTERVAL_MS = 15000;
 
+/**
+ * Anti-windup sync: when a head's polled grid power deviates this much from the
+ * commanded GS although the last write is old enough, the device is internally
+ * limiting (SoC/temperature) — adopt the reported value as the new base.
+ */
+const SYNC_DEVIATION_W = 150;
+const SYNC_MIN_AGE_MS = 10000;
+
 export class MultiHeadController {
 	private lastWriteTime = 0;
 	private readonly lastGs = new Map<number, number>();
@@ -173,10 +181,15 @@ export class MultiHeadController {
 				if (prev !== undefined && Math.abs(sp.gs - prev) < this.cfg.writeDeadBandW) {
 					continue;
 				}
-				await this.hooks.writeGs(sp.index, sp.gs);
-				await this.hooks.reflectGs(sp.index, sp.gs);
-				this.lastGs.set(sp.index, sp.gs);
-				wroteAny = true;
+				// Isolate each head: a failing write must not abort the other heads.
+				try {
+					await this.hooks.writeGs(sp.index, sp.gs);
+					await this.hooks.reflectGs(sp.index, sp.gs);
+					this.lastGs.set(sp.index, sp.gs);
+					wroteAny = true;
+				} catch (e) {
+					this.adapter.log.warn(`Head ${sp.index}: GS write failed: ${errMsg(e)}`);
+				}
 			}
 			if (wroteAny) {
 				this.lastWriteTime = now;
@@ -184,20 +197,57 @@ export class MultiHeadController {
 					`Total target ${totalTarget} W → ${setpoints.map(s => `H${s.index}:${s.gs}`).join(' ')} (grid ${Math.round(gridPower)} W)`,
 				);
 			}
-		} catch (e) {
-			this.adapter.log.warn(`Controller error: ${errMsg(e)}`);
 		} finally {
 			this.writeInProgress = false;
 		}
 	}
 
 	/**
+	 * Anti-windup feedback from the regular poll: if the device visibly does not
+	 * follow the commanded GS (internal limiting by SoC/temperature), adopt its
+	 * reported grid power as the new feed-forward base so the loop keeps converging.
+	 *
+	 * @param index 1-based head number
+	 * @param gp the head's polled grid-port power (W, +feed-in)
+	 */
+	public noteReportedGp(index: number, gp: number): void {
+		if (!Number.isFinite(gp)) {
+			return;
+		}
+		const last = this.lastGs.get(index);
+		if (last === undefined || Date.now() - this.lastWriteTime < SYNC_MIN_AGE_MS) {
+			return;
+		}
+		if (Math.abs(gp - last) > SYNC_DEVIATION_W) {
+			this.lastGs.set(index, Math.round(gp));
+			this.adapter.log.debug(
+				`Head ${index}: device delivers ${Math.round(gp)} W instead of commanded ${last} W — adopting as feed-forward base (anti-windup).`,
+			);
+		}
+	}
+
+	/**
+	 * Drops the remembered setpoint of a head (e.g. it went offline and may reboot
+	 * with GS=0), so the base falls back to its polled grid power on return.
+	 *
+	 * @param index 1-based head number
+	 */
+	public forgetHead(index: number): void {
+		this.lastGs.delete(index);
+	}
+
+	/**
 	 * Writes the same GS to every head (used for start and failsafe).
 	 *
 	 * @param gs setpoint to write
+	 * @param onlineOnly restrict to online heads and skip heads already at gs
+	 * (used by the repeating failsafe tick to avoid retry/log spam on offline heads)
 	 */
-	private async writeAll(gs: number): Promise<void> {
+	private async writeAll(gs: number, onlineOnly = false): Promise<void> {
 		for (const h of this.hooks.getHeads()) {
+			if (onlineOnly && (!h.online || this.lastGs.get(h.index) === gs)) {
+				continue;
+			}
 			try {
 				await this.hooks.writeGs(h.index, gs);
 				await this.hooks.reflectGs(h.index, gs);
@@ -241,7 +291,7 @@ export class MultiHeadController {
 			if (!this.writeInProgress) {
 				this.writeInProgress = true;
 				try {
-					await this.writeAll(0);
+					await this.writeAll(0, true);
 				} finally {
 					this.writeInProgress = false;
 				}
