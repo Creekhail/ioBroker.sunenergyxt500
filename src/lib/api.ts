@@ -17,6 +17,9 @@ import { URL } from 'node:url';
 /** Decoded contents of `state.reported` from /read. Unknown keys are tolerated. */
 export type ReportedState = Record<string, unknown>;
 
+/** Upper bound for a device response; a real /read is a few KB. */
+const MAX_RESPONSE_BYTES = 512 * 1024;
+
 /** Result of a /read: the decoded reported state plus the original response body. */
 export interface DeviceRead {
 	reported: ReportedState;
@@ -88,6 +91,9 @@ export class SunEnergyXtApi {
 					let data = '';
 					res.on('data', chunk => {
 						data += chunk;
+						if (data.length > MAX_RESPONSE_BYTES) {
+							req.destroy(new Error('Response too large'));
+						}
 					});
 					res.on('end', () => {
 						const status = res.statusCode ?? 0;
