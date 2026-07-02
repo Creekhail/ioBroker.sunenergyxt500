@@ -166,6 +166,13 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 	### **WORK IN PROGRESS**
 -->
 
+### 0.2.3 (2026-07-02)
+* (Creekhail) Object-tree compliance for the repository review:
+  * The `heads` container is now a **folder** so the hierarchy follows the required device→channel→state order.
+  * The switch states `control.MM` / `LM` / `LFB` / `LPS` / `PM` are now real **booleans** (previously 0/1 numbers) — adjust scripts that read or write them; the device still receives 0/1.
+  * Corrected roles: `GS`/`IS`/`MG` use `level`, `ups.UO` uses `value`.
+  * Object definitions are merged onto existing objects on start, so role/type/name updates reach existing installations (user settings like history configs are preserved).
+
 ### 0.2.2 (2026-07-02)
 * (Creekhail) Repository-checker compliance: complete admin translations in all languages (including the validator messages), release notes translated into all languages, removed an unknown jsonConfig property from the test button and use the adapter-managed timer during unload.
 

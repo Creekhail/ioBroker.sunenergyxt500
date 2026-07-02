@@ -190,7 +190,14 @@ class Sunenergyxt500 extends utils.Adapter {
     const ensure = async (id, common) => {
       desired.add(id);
       await this.setObjectNotExistsAsync(id, { type: "state", common, native: {} });
+      await this.extendObjectAsync(id, { common });
     };
+    desired.add("heads");
+    await this.setObjectAsync("heads", {
+      type: "folder",
+      common: { name: { en: "Storage heads", de: "Speicherk\xF6pfe" } },
+      native: {}
+    });
     for (const h of this.heads) {
       const base = `heads.${h.index}`;
       const name = h.label || `Head ${h.index}`;
@@ -378,6 +385,9 @@ class Sunenergyxt500 extends utils.Adapter {
           value = asString(raw);
         } else if (def.type === "number") {
           value = (0, import_states.roundTo)(raw, (_a = def.decimals) != null ? _a : 0, (_b = def.scale) != null ? _b : 1);
+        } else if (def.type === "boolean" && def.role !== "button") {
+          const n = num(raw);
+          value = n === void 0 ? null : n !== 0;
         }
         if (value === null) {
           continue;
@@ -602,6 +612,8 @@ class Sunenergyxt500 extends utils.Adapter {
         return;
       }
       payload = { RT: 1 };
+    } else if (def.type === "boolean") {
+      payload = { [def.field]: state.val ? 1 : 0 };
     } else if (def.type === "string") {
       payload = { [def.field]: state.val == null ? "" : String(state.val) };
     } else {

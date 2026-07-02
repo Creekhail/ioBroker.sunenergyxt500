@@ -121,7 +121,7 @@ class Sunenergyxt500 extends utils.Adapter {
 	/** relative control state id (e.g. "control.GS") → its definition */
 	private readonly controlMap = new Map<string, StateDef>();
 	/** Last value confirmed (ack=true) per control state — avoids a DB read per field and poll. */
-	private readonly confirmedCache = new Map<string, string | number>();
+	private readonly confirmedCache = new Map<string, string | number | boolean>();
 
 	public constructor(options: Partial<utils.AdapterOptions> = {}) {
 		super({
@@ -232,7 +232,20 @@ class Sunenergyxt500 extends utils.Adapter {
 		const ensure = async (id: string, common: ioBroker.StateCommon): Promise<void> => {
 			desired.add(id);
 			await this.setObjectNotExistsAsync(id, { type: 'state', common, native: {} });
+			// Merge the current definition onto existing objects so role/type/name
+			// updates reach old installations (extend keeps user data like common.custom).
+			await this.extendObjectAsync(id, { common });
 		};
+
+		// The heads container must be a folder: a device below a channel violates the
+		// required device→channel→state hierarchy. setObject (not NotExists) also
+		// migrates installations where it was created as a channel before.
+		desired.add('heads');
+		await this.setObjectAsync('heads', {
+			type: 'folder',
+			common: { name: { en: 'Storage heads', de: 'Speicherköpfe' } },
+			native: {},
+		});
 
 		for (const h of this.heads) {
 			const base = `heads.${h.index}`;
@@ -431,11 +444,15 @@ class Sunenergyxt500 extends utils.Adapter {
 					continue;
 				}
 				const raw = def.derive ? def.derive(data) : data[def.field];
-				let value: string | number | null = null;
+				let value: string | number | boolean | null = null;
 				if (def.type === 'string') {
 					value = asString(raw);
 				} else if (def.type === 'number') {
 					value = roundTo(raw, def.decimals ?? 0, def.scale ?? 1);
+				} else if (def.type === 'boolean' && def.role !== 'button') {
+					// Device reports switches as 0/1; buttons (RT) are never read back.
+					const n = num(raw);
+					value = n === undefined ? null : n !== 0;
 				}
 				if (value === null) {
 					continue;
@@ -521,7 +538,7 @@ class Sunenergyxt500 extends utils.Adapter {
 	 * @param id full control state id
 	 * @param value the value the device currently reports
 	 */
-	private async confirmControlState(id: string, value: string | number): Promise<void> {
+	private async confirmControlState(id: string, value: string | number | boolean): Promise<void> {
 		// Cheap in-memory shortcut: we confirmed exactly this value before and no user
 		// command invalidated it since (handleControlWrite clears the entry).
 		if (this.confirmedCache.get(id) === value) {
@@ -676,6 +693,9 @@ class Sunenergyxt500 extends utils.Adapter {
 				return;
 			}
 			payload = { RT: 1 };
+		} else if (def.type === 'boolean') {
+			// Switch states are boolean in ioBroker; the device expects 0/1.
+			payload = { [def.field]: state.val ? 1 : 0 };
 		} else if (def.type === 'string') {
 			payload = { [def.field]: state.val == null ? '' : String(state.val) };
 		} else {

@@ -485,7 +485,7 @@ const measurementDefs = [
   {
     id: "ups.UO",
     field: "UO",
-    role: "indicator",
+    role: "value",
     type: "number",
     name: { en: "UPS mode active (0/1)", de: "USV-Modus aktiv (0/1)" }
   },
@@ -563,7 +563,7 @@ const controlDefs = [
   {
     id: "control.GS",
     field: "GS",
-    role: "level.power",
+    role: "level",
     unit: "W",
     type: "number",
     name: {
@@ -575,7 +575,7 @@ const controlDefs = [
   {
     id: "control.IS",
     field: "IS",
-    role: "level.power",
+    role: "level",
     unit: "W",
     type: "number",
     name: { en: "Max. grid feed-in / inverter output limit", de: "Max. Netzeinspeisung / WR-Ausgangsgrenze" },
@@ -612,10 +612,10 @@ const controlDefs = [
     id: "control.MM",
     field: "MM",
     role: "switch",
-    type: "number",
+    type: "boolean",
     name: {
-      en: "Local zero feed-in / self-consumption mode (0/1)",
-      de: "Lokale Nulleinspeisung / Eigenverbrauch (0/1)"
+      en: "Local zero feed-in / self-consumption mode",
+      de: "Lokale Nulleinspeisung / Eigenverbrauch"
     },
     write: true
   },
@@ -647,7 +647,7 @@ const controlDefs = [
   {
     id: "control.MG",
     field: "MG",
-    role: "level.power",
+    role: "level",
     unit: "W",
     type: "number",
     name: { en: "Max. grid-tied output power", de: "Max. netzgekoppelte Ausgangsleistung" },
@@ -658,32 +658,32 @@ const controlDefs = [
     id: "control.LM",
     field: "LM",
     role: "switch",
-    type: "number",
-    name: { en: "Local mode (0/1, blocks cloud control)", de: "Lokaler Modus (0/1, blockiert Cloud)" },
+    type: "boolean",
+    name: { en: "Local mode (blocks cloud control)", de: "Lokaler Modus (blockiert Cloud)" },
     write: true
   },
   {
     id: "control.LFB",
     field: "LFB",
     role: "switch",
-    type: "number",
-    name: { en: "Load priority switch (0/1)", de: "Lastpriorit\xE4ts-Schalter (0/1)" },
+    type: "boolean",
+    name: { en: "Load priority switch", de: "Lastpriorit\xE4ts-Schalter" },
     write: true
   },
   {
     id: "control.LPS",
     field: "LPS",
     role: "switch",
-    type: "number",
-    name: { en: "Off-grid output switch (0/1)", de: "Inselausgang-Schalter (0/1)" },
+    type: "boolean",
+    name: { en: "Off-grid output switch", de: "Inselausgang-Schalter" },
     write: true
   },
   {
     id: "control.PM",
     field: "PM",
     role: "switch",
-    type: "number",
-    name: { en: "Parallel mode (0/1)", de: "Parallel-Modus (0/1)" },
+    type: "boolean",
+    name: { en: "Parallel mode", de: "Parallel-Modus" },
     write: true
   }
 ];
