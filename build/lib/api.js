@@ -33,6 +33,7 @@ __export(api_exports, {
 module.exports = __toCommonJS(api_exports);
 var http = __toESM(require("node:http"));
 var import_node_url = require("node:url");
+const MAX_RESPONSE_BYTES = 512 * 1024;
 class SunEnergyXtApi {
   /**
    * @param host - device IP or hostname (with or without scheme)
@@ -87,6 +88,9 @@ class SunEnergyXtApi {
           let data = "";
           res.on("data", (chunk) => {
             data += chunk;
+            if (data.length > MAX_RESPONSE_BYTES) {
+              req.destroy(new Error("Response too large"));
+            }
           });
           res.on("end", () => {
             var _a;

@@ -1,15 +1,37 @@
 {
 	"common": {
 		"name": "sunenergyxt500",
-		"version": "0.2.0",
+		"version": "0.2.1",
 		"news": {
+			"0.2.1": {
+				"en": "Controller robustness: config values of 0 are respected (gain/dead bands), per-head write isolation, anti-windup when a device limits internally, GS is neutralized to 0 when the controller stops. Heads are polled in parallel, the startup cleanup only touches adapter-managed objects, and manual GS writes are rejected while the controller is active.",
+				"de": "Regler-Robustheit: Config-Werte von 0 werden respektiert (Verstärkung/Totbänder), Schreibfehler pro Kopf isoliert, Anti-Windup bei interner Begrenzung des Geräts, GS wird beim Stoppen des Reglers auf 0 neutralisiert. Köpfe werden parallel abgefragt, das Aufräumen beim Start fasst nur adapter-verwaltete Objekte an, manuelle GS-Schreibvorgänge werden bei aktivem Regler abgelehnt."
+			},
 			"0.2.0": {
 				"en": "Multi-head support: manage up to three SunEnergyXT heads in one instance; the controller splits the grid setpoint across all heads. New per-head object tree (heads.N.*) and combined totals (total.*), plus a connection test button. Device self-regulation stays single-head only. Note: the object tree was restructured — re-create existing single-head instances.",
-				"de": "Mehrkopf-Unterstützung: bis zu drei SunEnergyXT-Köpfe in einer Instanz; der Regler verteilt den Netz-Sollwert auf alle Köpfe. Neuer Objektbaum pro Kopf (heads.N.*) und Summen (total.*), plus Verbindungs-Testknopf. Geräte-Eigenregelung nur mit einem Kopf. Hinweis: Objektbaum umstrukturiert — bestehende Einzelkopf-Instanzen neu anlegen."
+				"de": "Mehrkopf-Unterstützung: bis zu drei SunEnergyXT-Köpfe in einer Instanz; der Regler verteilt den Netz-Sollwert auf alle Köpfe. Neuer Objektbaum pro Kopf (heads.N.*) und Summen (total.*), plus Verbindungs-Testknopf. Geräte-Eigenregelung nur mit einem Kopf. Hinweis: Objektbaum umstrukturiert — bestehende Einzelkopf-Instanzen neu anlegen.",
+				"ru": "Поддержка нескольких головок: управление до трех головок SunEnergyXT в одном экземпляре; контроллер распределяет заданное значение сети по всем головкам. Новое дерево объектов по головам (heads.N.*) и объединенные итоги (total.*), а также кнопка проверки соединения. Саморегулирование устройства остается только с одной головкой. Примечание: дерево объектов было реструктурировано — заново создайте существующие экземпляры с одной головкой.",
+				"pt": "Suporte para vários cabeçotes: gerencie até três cabeçotes SunEnergyXT em uma instância; o controlador divide o ponto de ajuste da rede em todos os cabeçotes. Nova árvore de objetos por cabeça (heads.N.*) e totais combinados (total.*), além de um botão de teste de conexão. A autorregulação do dispositivo permanece apenas com um único cabeçote. Nota: a árvore de objetos foi reestruturada — recriar instâncias single-head existentes.",
+				"nl": "Ondersteuning voor meerdere koppen: beheer maximaal drie SunEnergyXT-koppen in één keer; de controller verdeelt het netinstelpunt over alle koppen. Nieuwe objectboom per hoofd (heads.N.*) en gecombineerde totalen (total.*), plus een verbindingstestknop. Zelfregulering van het apparaat blijft alleen op één kop. Opmerking: de objectboom is geherstructureerd - maak bestaande exemplaren met één kop opnieuw.",
+				"fr": "Prise en charge de plusieurs têtes : gérez jusqu'à trois têtes SunEnergyXT en une seule instance ; le contrôleur répartit le point de consigne du réseau entre toutes les têtes. Nouvelle arborescence d'objets par tête (heads.N.*) et totaux combinés (total.*), plus un bouton de test de connexion. L'autorégulation de l'appareil reste à tête unique. Remarque : l'arborescence des objets a été restructurée : recréez les instances à tête unique existantes.",
+				"it": "Supporto multi-testa: gestisci fino a tre teste SunEnergyXT in un'unica istanza; il controller suddivide il setpoint di rete su tutte le teste. Nuovo albero degli oggetti per testa (teste.N.*) e totali combinati (totale.*), più un pulsante per il test della connessione. L'autoregolazione del dispositivo rimane solo monotesta. Nota: l'albero degli oggetti è stato ristrutturato: ricrea le istanze a testa singola esistenti.",
+				"es": "Soporte para múltiples cabezales: administre hasta tres cabezales SunEnergyXT en una sola instancia; el controlador divide el punto de ajuste de la red entre todos los cabezales. Nuevo árbol de objetos por cabeza (cabezas.N.*) y totales combinados (total.*), además de un botón de prueba de conexión. La autorregulación del dispositivo se mantiene en un solo cabezal. Nota: el árbol de objetos se reestructuró: vuelva a crear instancias de un solo cabezal existentes.",
+				"pl": "Obsługa wielu głowic: zarządzanie maksymalnie trzema głowicami SunEnergyXT w jednej instancji; sterownik dzieli wartość zadaną sieci na wszystkie głowice. Nowe drzewo obiektów na głowę (szt.N.*) i łączne sumy (ogółem.*), a także przycisk testu połączenia. Samoregulacja urządzenia pozostaje tylko w przypadku jednej głowicy. Uwaga: drzewo obiektów zostało przebudowane — odtwórz istniejące instancje jednogłowicowe.",
+				"uk": "Підтримка кількох головок: керуйте до трьох головок SunEnergyXT в одному екземплярі; контролер розподіляє задане значення мережі між усіма головками. Нове дерево об’єктів для кожної голови (heads.N.*) і комбіновані підсумки (total.*), а також кнопка перевірки підключення. Саморегуляція пристрою залишається тільки в одній головці. Примітка: дерево об’єктів було реструктуровано — повторно створіть існуючі одноголові екземпляри.",
+				"zh-cn": "多头支持：在一个实例中最多管理三个SunEnergyXT头；控制器将网格设定值分配给所有头。新的每个头对象树 (heads.N.*) 和组合总数 (total.*)，以及一个连接测试按钮。设备自我调节仅保持单头。注意：对象树已重组 - 重新创建现有的单头实例。"
 			},
 			"0.1.1": {
 				"en": "Released via npm trusted publishing (provenance) and a package metadata fix.",
-				"de": "Veröffentlichung über npm Trusted Publishing (Provenance) und eine Paket-Metadaten-Korrektur."
+				"de": "Veröffentlichung über npm Trusted Publishing (Provenance) und eine Paket-Metadaten-Korrektur.",
+				"ru": "Выпущено через доверенную публикацию npm (происхождение) и исправление метаданных пакета.",
+				"pt": "Lançado via publicação confiável npm (proveniência) e uma correção de metadados de pacote.",
+				"nl": "Uitgegeven via npm vertrouwde publicatie (herkomst) en een oplossing voor de metagegevens van het pakket.",
+				"fr": "Publié via la publication approuvée npm (provenance) et un correctif de métadonnées du package.",
+				"it": "Rilasciato tramite pubblicazione attendibile npm (provenienza) e una correzione dei metadati del pacchetto.",
+				"es": "Publicado a través de publicación confiable de npm (procedencia) y una corrección de metadatos del paquete.",
+				"pl": "Wydane za pośrednictwem zaufanego publikowania npm (pochodzenie) i poprawka metadanych pakietu.",
+				"uk": "Випущено через довірену публікацію npm (походження) і виправлено метадані пакета.",
+				"zh-cn": "通过 npm 可信发布（出处）和包元数据修复发布。"
 			},
 			"0.1.0": {
 				"en": "initial release",

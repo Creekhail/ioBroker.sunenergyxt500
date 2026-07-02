@@ -27,6 +27,25 @@ var import_controller = require("./lib/controller");
 var import_states = require("./lib/states");
 const WRITE_CONFIRM_DELAY_MS = 1500;
 const MAX_HEADS = 3;
+const ALL_DEFS = [...import_states.measurementDefs, ...import_states.controlDefs];
+const MANAGED_ROOTS = /* @__PURE__ */ new Set([
+  "heads",
+  "total",
+  "controller",
+  "info",
+  // legacy 0.1.x flat tree
+  "battery",
+  "grid",
+  "load",
+  "pv",
+  "system",
+  "device",
+  "meter",
+  "ups",
+  "fault",
+  "control"
+]);
+const UNLOAD_NEUTRALIZE_BUDGET_MS = 2e3;
 const AGGREGATE_DEFS = [
   {
     id: "total.soc",
@@ -74,6 +93,8 @@ class Sunenergyxt500 extends utils.Adapter {
   gridStateId = "";
   /** relative control state id (e.g. "control.GS") → its definition */
   controlMap = /* @__PURE__ */ new Map();
+  /** Last value confirmed (ack=true) per control state — avoids a DB read per field and poll. */
+  confirmedCache = /* @__PURE__ */ new Map();
   constructor(options = {}) {
     super({
       ...options,
@@ -86,8 +107,8 @@ class Sunenergyxt500 extends utils.Adapter {
   }
   async onReady() {
     await this.setStateChangedAsync("info.connection", false, true);
-    const timeoutMs = Math.max(1e3, Math.round(Number(this.config.requestTimeout) || 8e3));
-    this.pollIntervalMs = Math.max(1e3, Math.round((Number(this.config.pollInterval) || 5) * 1e3));
+    const timeoutMs = Math.max(1e3, Math.round((0, import_states.cfgNum)(this.config.requestTimeout, 8e3)));
+    this.pollIntervalMs = Math.max(1e3, Math.round((0, import_states.cfgNum)(this.config.pollInterval, 5) * 1e3));
     const configured = [
       { host: this.config.head1Host, label: this.config.head1Label },
       { host: this.config.head2Host, label: this.config.head2Label },
@@ -176,7 +197,7 @@ class Sunenergyxt500 extends utils.Adapter {
       desired.add(base);
       await this.setObjectNotExistsAsync(base, { type: "device", common: { name }, native: {} });
       await this.extendObjectAsync(base, { common: { name } });
-      for (const def of [...import_states.measurementDefs, ...import_states.controlDefs]) {
+      for (const def of ALL_DEFS) {
         await ensure(`${base}.${def.id}`, {
           name: def.name,
           type: def.type,
@@ -308,6 +329,9 @@ class Sunenergyxt500 extends utils.Adapter {
       if (!rel) {
         continue;
       }
+      if (!MANAGED_ROOTS.has(rel.split(".")[0])) {
+        continue;
+      }
       const type = (_a = all[fullId]) == null ? void 0 : _a.type;
       if (type !== "state" && type !== "channel" && type !== "device" && type !== "folder") {
         continue;
@@ -330,9 +354,7 @@ class Sunenergyxt500 extends utils.Adapter {
     this.log.info(`Cleaned up ${toDelete.length} obsolete object(s).`);
   }
   async pollLoop() {
-    for (const h of this.heads) {
-      await this.readAndApplyHead(h);
-    }
+    await Promise.all(this.heads.map((h) => this.readAndApplyHead(h)));
     await this.computeAggregates();
     this.pollTimer = this.setTimeout(() => void this.pollLoop(), this.pollIntervalMs);
   }
@@ -342,11 +364,11 @@ class Sunenergyxt500 extends utils.Adapter {
    * @param h the head to poll
    */
   async readAndApplyHead(h) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f, _g;
     const base = `heads.${h.index}`;
     try {
       const { reported: data, body } = await h.api.read();
-      for (const def of [...import_states.measurementDefs, ...import_states.controlDefs]) {
+      for (const def of ALL_DEFS) {
         if (!def.derive && !(def.field in data)) {
           continue;
         }
@@ -373,9 +395,12 @@ class Sunenergyxt500 extends utils.Adapter {
       h.bp = num(data.BP);
       h.gp = num(data.GP);
       h.packs = Math.max(1, (_c = num(data.ON)) != null ? _c : 1);
-      h.maxPower = (_d = num(data.MG)) != null ? _d : 2400;
+      h.maxPower = (_d = num(data.MG)) != null ? _d : fallbackMaxPower(data);
       h.socMin = (_e = num(data.SI)) != null ? _e : num(data.SO);
       h.socMax = num(data.SA);
+      if (h.gp !== void 0) {
+        (_f = this.controller) == null ? void 0 : _f.noteReportedGp(h.index, h.gp);
+      }
       if (!h.online) {
         h.online = true;
         await this.setState(`${base}.info.online`, true, true);
@@ -385,6 +410,7 @@ class Sunenergyxt500 extends utils.Adapter {
       if (h.online || h.soc === void 0) {
         h.online = false;
         await this.setStateChangedAsync(`${base}.info.online`, false, true);
+        (_g = this.controller) == null ? void 0 : _g.forgetHead(h.index);
       }
       await this.setStateChangedAsync(`${base}.info.lastError`, errMsg(e), true);
       this.log.warn(`Head ${h.index} (${h.host}) poll failed: ${errMsg(e)}`);
@@ -435,10 +461,14 @@ class Sunenergyxt500 extends utils.Adapter {
    * @param value the value the device currently reports
    */
   async confirmControlState(id, value) {
+    if (this.confirmedCache.get(id) === value) {
+      return;
+    }
     const cur = await this.getStateAsync(id);
     if (!cur || cur.val !== value || cur.ack !== true) {
       await this.setStateAsync(id, { val: value, ack: true });
     }
+    this.confirmedCache.set(id, value);
   }
   /**
    * Writes the device fields (MM/MD) required by the active control mode for every
@@ -559,6 +589,13 @@ class Sunenergyxt500 extends utils.Adapter {
     if (!def || !h) {
       return;
     }
+    if (def.field === "GS" && this.controller) {
+      this.log.warn(
+        `Head ${h.index}: ignoring manual GS write \u2014 the controller owns GS in controller mode (set the control mode to off for manual GS control).`
+      );
+      return;
+    }
+    this.confirmedCache.delete(relId);
     let payload;
     if (def.field === "RT") {
       if (!state.val) {
@@ -598,7 +635,7 @@ class Sunenergyxt500 extends utils.Adapter {
     }
     const msg = (_a = obj.message) != null ? _a : {};
     const heads = Array.isArray(msg.heads) ? msg.heads : [];
-    const timeoutMs = Math.max(1e3, Math.round(Number(this.config.requestTimeout) || 8e3));
+    const timeoutMs = Math.max(1e3, Math.round((0, import_states.cfgNum)(this.config.requestTimeout, 8e3)));
     const lines = [];
     let failures = 0;
     let i = 0;
@@ -626,16 +663,36 @@ class Sunenergyxt500 extends utils.Adapter {
     }
   }
   onUnload(callback) {
-    var _a;
-    try {
-      if (this.pollTimer) {
-        this.clearTimeout(this.pollTimer);
+    void (async () => {
+      try {
+        if (this.pollTimer) {
+          this.clearTimeout(this.pollTimer);
+        }
+        if (this.controller) {
+          this.controller.stop();
+          await Promise.race([
+            this.neutralizeAllGs(),
+            new Promise((resolve) => setTimeout(resolve, UNLOAD_NEUTRALIZE_BUDGET_MS))
+          ]);
+        }
+      } catch {
+      } finally {
+        callback();
       }
-      (_a = this.controller) == null ? void 0 : _a.stop();
-      callback();
-    } catch {
-      callback();
-    }
+    })();
+  }
+  /** Writes a neutral GS=0 to every reachable head (used during unload). */
+  async neutralizeAllGs() {
+    await Promise.all(
+      this.heads.filter((h) => h.online).map(async (h) => {
+        try {
+          await h.api.write({ GS: 0 });
+          this.log.info(`Head ${h.index}: GS neutralized to 0 (controller shutdown).`);
+        } catch (e) {
+          this.log.warn(`Head ${h.index}: could not neutralize GS: ${errMsg(e)}`);
+        }
+      })
+    );
   }
   /** Starts the multi-head self-consumption controller (controller mode). */
   async setupController() {
@@ -647,13 +704,13 @@ class Sunenergyxt500 extends utils.Adapter {
       return;
     }
     const cfg = {
-      gain: Number(this.config.controllerGain) || 0.3,
-      deadBandW: Number(this.config.controllerDeadBandW) || 20,
-      minIntervalMs: Math.max(1e3, Number(this.config.controllerMinIntervalMs) || 5e3),
-      writeDeadBandW: Math.max(0, Number(this.config.controllerWriteDeadBandW) || 10),
+      gain: (0, import_states.cfgNum)(this.config.controllerGain, 0.3),
+      deadBandW: Math.max(0, (0, import_states.cfgNum)(this.config.controllerDeadBandW, 20)),
+      minIntervalMs: Math.max(1e3, (0, import_states.cfgNum)(this.config.controllerMinIntervalMs, 5e3)),
+      writeDeadBandW: Math.max(0, (0, import_states.cfgNum)(this.config.controllerWriteDeadBandW, 10)),
       inverted: !!this.config.gridPowerInverted,
-      warnSec: Number(this.config.watchdogWarnSec) || 30,
-      failsafeSec: Number(this.config.watchdogFailsafeSec) || 180
+      warnSec: Math.max(5, (0, import_states.cfgNum)(this.config.watchdogWarnSec, 30)),
+      failsafeSec: Math.max(10, (0, import_states.cfgNum)(this.config.watchdogFailsafeSec, 180))
     };
     const hooks = {
       getHeads: () => this.headStates(),
@@ -664,7 +721,9 @@ class Sunenergyxt500 extends utils.Adapter {
         }
       },
       reflectGs: async (index, gs) => {
-        await this.setStateChangedAsync(`heads.${index}.control.GS`, gs, true);
+        const id = `heads.${index}.control.GS`;
+        await this.setStateChangedAsync(id, gs, true);
+        this.confirmedCache.set(id, gs);
       }
     };
     this.controller = new import_controller.MultiHeadController(this, hooks, this.gridStateId, cfg);
@@ -692,6 +751,20 @@ class Sunenergyxt500 extends utils.Adapter {
 }
 function errMsg(e) {
   return e instanceof Error ? e.message : String(e);
+}
+function fallbackMaxPower(data) {
+  const pk = num(data.PK);
+  if (pk === 1) {
+    return 800;
+  }
+  if (pk === 2) {
+    return 2400;
+  }
+  const devType = typeof data.DevType === "string" ? data.DevType : "";
+  if (devType && !/pro/i.test(devType)) {
+    return 800;
+  }
+  return 2400;
 }
 function num(value) {
   const n = Number(value);

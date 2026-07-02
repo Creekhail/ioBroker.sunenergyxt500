@@ -166,6 +166,18 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 	### **WORK IN PROGRESS**
 -->
 
+### 0.2.1 (2026-07-01)
+* (Creekhail) Controller robustness and hardening:
+  * Config values of 0 are respected (gain / dead bands) instead of silently becoming defaults.
+  * A failing GS write on one head no longer aborts the setpoints of the other heads.
+  * Anti-windup: when a device visibly limits internally (SoC/temperature), the controller adopts the reported grid power as its feed-forward base.
+  * GS is neutralized to 0 on all reachable heads when the controller stops (adapter stop/restart or leaving controller mode), so no head keeps executing a stale setpoint unwatched.
+  * Heads are polled in parallel (one unreachable head no longer stretches the poll cycle); fewer state-DB reads per poll.
+  * The startup object cleanup only touches adapter-managed subtrees; user-created states in the namespace survive.
+  * Missing MG falls back to the model's power limit (500 → 800 W) instead of assuming a PRO; device responses are size-capped.
+  * Manual GS writes are rejected (with a warning) while the controller is active; failsafe no longer retries offline heads every tick.
+  * New unit tests for the controller (regulation, dead bands, throttling, failsafe, anti-windup).
+
 ### 0.2.0 (2026-06-30)
 * (Creekhail) Multi-head support: manage up to three SunEnergyXT heads in one instance. The adapter controller now computes one grid setpoint and splits it across all online heads (equal split, gated by each head's SoC headroom, with per-head power caps and overflow redistribution). New per-head object tree `heads.<n>.*` and combined `total.*` aggregates; a "Test all heads" connectivity button; device self-regulation is restricted to a single head. **The object tree was restructured — existing single-head instances should be re-created (delete the old objects / re-add the instance).**
 

@@ -21,6 +21,7 @@ __export(states_exports, {
   TASMOTA_PWR_BY_SUBTYPE: () => TASMOTA_PWR_BY_SUBTYPE,
   applyMeterModeCoupling: () => applyMeterModeCoupling,
   buildMeterMd: () => buildMeterMd,
+  cfgNum: () => cfgNum,
   controlDefs: () => controlDefs,
   measurementDefs: () => measurementDefs,
   roundTo: () => roundTo
@@ -790,11 +791,19 @@ function roundTo(value, decimals = 0, scale = 1) {
   const factor = Math.pow(10, decimals);
   return Math.round(n * factor) / factor;
 }
+function cfgNum(value, def) {
+  if (value === null || value === void 0 || value === "") {
+    return def;
+  }
+  const n = Number(value);
+  return Number.isFinite(n) ? n : def;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   TASMOTA_PWR_BY_SUBTYPE,
   applyMeterModeCoupling,
   buildMeterMd,
+  cfgNum,
   controlDefs,
   measurementDefs,
   roundTo
