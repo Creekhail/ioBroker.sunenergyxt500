@@ -12,7 +12,7 @@
 
 ## sunenergyxt500 adapter for ioBroker
 
-Integration and self-consumption control for **SunEnergyXT 500 / 500 PRO** AC-coupled hybrid battery storage systems via the device's **local HTTP API** — no cloud account required. One instance manages **up to three heads** (storage towers).
+Integration and self-consumption control for **[SunEnergyXT 500 / 500 PRO](https://www.sunenergyxt.com/details-500-series)** AC-coupled hybrid battery storage systems (manufacturer: [SunEnergyXT](https://www.sunenergyxt.com/)) via the device's **local HTTP API** — no cloud account required. One instance manages **up to three heads** (storage towers).
 
 ## Language / Sprache
 
@@ -165,6 +165,9 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+
+### 0.2.5 (2026-07-02)
+* (Creekhail) Review follow-up: added the manufacturer/product link to the README, and the controller now only accepts acknowledged grid-power values (`ack=true`) from the configured meter state (a manually written test value can no longer drive the battery).
 
 ### 0.2.4 (2026-07-02)
 * (Creekhail) State names are now provided in all ioBroker languages: English and German stay hand-written, the other languages are machine-translated (generated file, merged at object creation; existing installations are updated in place).

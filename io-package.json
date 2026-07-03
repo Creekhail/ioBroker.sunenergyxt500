@@ -1,8 +1,21 @@
 {
 	"common": {
 		"name": "sunenergyxt500",
-		"version": "0.2.4",
+		"version": "0.2.5",
 		"news": {
+			"0.2.5": {
+				"en": "Review follow-up: manufacturer/product link in the README and the controller now only accepts acknowledged grid-power values (ack=true) from the meter state.",
+				"de": "Review-Nacharbeit: Hersteller-/Produktlink im README, und der Regler akzeptiert nur noch bestätigte Netzleistungswerte (ack=true) vom Zähler-State.",
+				"ru": "Последующие действия по проверке: ссылка на производителя/продукт в файле README и контроллер теперь принимают только подтвержденные значения мощности сети (ack=true) из состояния счетчика.",
+				"pt": "Acompanhamento da revisão: link fabricante/produto no README e o controlador agora aceita apenas valores de potência da rede reconhecidos (ack=true) do estado do medidor.",
+				"nl": "Evaluatie vervolg: fabrikant/productkoppeling in de README en de controller accepteert nu alleen erkende netvermogenswaarden (ack=true) van de meterstatus.",
+				"fr": "Suivi de l'examen : lien fabricant/produit dans le fichier README et le contrôleur n'accepte désormais que les valeurs de puissance du réseau reconnues (ack=true) à partir de l'état du compteur.",
+				"it": "Follow-up della revisione: il collegamento produttore/prodotto nel file README e il controller ora accetta solo valori di potenza di rete riconosciuti (ack=true) dallo stato del contatore.",
+				"es": "Seguimiento de la revisión: enlace fabricante/producto en el archivo README y el controlador ahora solo acepta valores de potencia de red reconocidos (ack=true) del estado del medidor.",
+				"pl": "Kontynuacja przeglądu: link do producenta/produktu w pliku README i sterownik akceptuje teraz tylko potwierdzone wartości mocy sieci (ack=true) ze stanu licznika.",
+				"uk": "Подальший перегляд: посилання на виробника/продукт у файлі README, і контролер тепер приймає лише підтверджені значення потужності мережі (ack=true) із стану лічильника.",
+				"zh-cn": "查看后续内容：自述文件中的制造商/产品链接和控制器现在仅接受来自仪表状态的已确认的电网功率值 (ack=true)。"
+			},
 			"0.2.4": {
 				"en": "State names are now provided in all ioBroker languages (hand-written English/German, machine-translated otherwise).",
 				"de": "State-Namen liegen jetzt in allen ioBroker-Sprachen vor (Englisch/Deutsch handgeschrieben, übrige maschinell übersetzt).",

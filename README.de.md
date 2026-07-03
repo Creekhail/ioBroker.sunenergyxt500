@@ -12,7 +12,7 @@
 
 ## sunenergyxt500-Adapter für ioBroker
 
-Integration und Eigenverbrauchsregelung für **SunEnergyXT 500 / 500 PRO** AC-gekoppelte Hybrid-Batteriespeicher über die **lokale HTTP-API** des Geräts — kein Cloud-Konto nötig. Eine Instanz verwaltet **bis zu drei Köpfe** (Speichertürme).
+Integration und Eigenverbrauchsregelung für **[SunEnergyXT 500 / 500 PRO](https://www.sunenergyxt.com/details-500-series)** AC-gekoppelte Hybrid-Batteriespeicher (Hersteller: [SunEnergyXT](https://www.sunenergyxt.com/)) über die **lokale HTTP-API** des Geräts — kein Cloud-Konto nötig. Eine Instanz verwaltet **bis zu drei Köpfe** (Speichertürme).
 
 ## Sprache / Language
 

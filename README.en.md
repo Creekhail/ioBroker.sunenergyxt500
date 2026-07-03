@@ -12,7 +12,7 @@
 
 ## sunenergyxt500 adapter for ioBroker
 
-Integration and self-consumption control for **SunEnergyXT 500 / 500 PRO** AC-coupled hybrid battery storage systems via the device's **local HTTP API** — no cloud account required. One instance manages **up to three heads** (storage towers).
+Integration and self-consumption control for **[SunEnergyXT 500 / 500 PRO](https://www.sunenergyxt.com/details-500-series)** AC-coupled hybrid battery storage systems (manufacturer: [SunEnergyXT](https://www.sunenergyxt.com/)) via the device's **local HTTP API** — no cloud account required. One instance manages **up to three heads** (storage towers).
 
 ## Language / Sprache
 

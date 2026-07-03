@@ -661,9 +661,12 @@ class Sunenergyxt500 extends utils.Adapter {
 		if (!state) {
 			return;
 		}
-		// Foreign grid-power source: drive the controller on every update (ack=true).
+		// Foreign grid-power source: only trust acknowledged sensor values (a manually
+		// written ack=false test value must not drive the battery).
 		if (this.controller && id === this.gridStateId) {
-			void this.controller.onGridPower(Number(state.val));
+			if (state.ack) {
+				void this.controller.onGridPower(Number(state.val));
+			}
 			return;
 		}
 		// Own control states: only act on user commands (ack=false).

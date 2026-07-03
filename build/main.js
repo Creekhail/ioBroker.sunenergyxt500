@@ -579,7 +579,9 @@ class Sunenergyxt500 extends utils.Adapter {
       return;
     }
     if (this.controller && id === this.gridStateId) {
-      void this.controller.onGridPower(Number(state.val));
+      if (state.ack) {
+        void this.controller.onGridPower(Number(state.val));
+      }
       return;
     }
     if (state.ack) {
