@@ -1,200 +1,200 @@
 {
-	"common": {
-		"name": "sunenergyxt500",
-		"version": "0.2.5",
-		"news": {
-			"0.2.5": {
-				"en": "Review follow-up: manufacturer/product link in the README and the controller now only accepts acknowledged grid-power values (ack=true) from the meter state.",
-				"de": "Review-Nacharbeit: Hersteller-/Produktlink im README, und der Regler akzeptiert nur noch bestätigte Netzleistungswerte (ack=true) vom Zähler-State.",
-				"ru": "Последующие действия по проверке: ссылка на производителя/продукт в файле README и контроллер теперь принимают только подтвержденные значения мощности сети (ack=true) из состояния счетчика.",
-				"pt": "Acompanhamento da revisão: link fabricante/produto no README e o controlador agora aceita apenas valores de potência da rede reconhecidos (ack=true) do estado do medidor.",
-				"nl": "Evaluatie vervolg: fabrikant/productkoppeling in de README en de controller accepteert nu alleen erkende netvermogenswaarden (ack=true) van de meterstatus.",
-				"fr": "Suivi de l'examen : lien fabricant/produit dans le fichier README et le contrôleur n'accepte désormais que les valeurs de puissance du réseau reconnues (ack=true) à partir de l'état du compteur.",
-				"it": "Follow-up della revisione: il collegamento produttore/prodotto nel file README e il controller ora accetta solo valori di potenza di rete riconosciuti (ack=true) dallo stato del contatore.",
-				"es": "Seguimiento de la revisión: enlace fabricante/producto en el archivo README y el controlador ahora solo acepta valores de potencia de red reconocidos (ack=true) del estado del medidor.",
-				"pl": "Kontynuacja przeglądu: link do producenta/produktu w pliku README i sterownik akceptuje teraz tylko potwierdzone wartości mocy sieci (ack=true) ze stanu licznika.",
-				"uk": "Подальший перегляд: посилання на виробника/продукт у файлі README, і контролер тепер приймає лише підтверджені значення потужності мережі (ack=true) із стану лічильника.",
-				"zh-cn": "查看后续内容：自述文件中的制造商/产品链接和控制器现在仅接受来自仪表状态的已确认的电网功率值 (ack=true)。"
-			},
-			"0.2.4": {
-				"en": "State names are now provided in all ioBroker languages (hand-written English/German, machine-translated otherwise).",
-				"de": "State-Namen liegen jetzt in allen ioBroker-Sprachen vor (Englisch/Deutsch handgeschrieben, übrige maschinell übersetzt).",
-				"ru": "Названия состояний теперь предоставляются на всех языках ioBroker (рукописный английский/немецкий, в противном случае — машинный перевод).",
-				"pt": "Os nomes dos estados agora são fornecidos em todos os idiomas do ioBroker (escritos à mão em inglês/alemão, caso contrário, traduzidos automaticamente).",
-				"nl": "Staatsnamen worden nu in alle ioBroker-talen aangeboden (handgeschreven Engels/Duits, anders machinaal vertaald).",
-				"fr": "Les noms d'État sont désormais fournis dans toutes les langues d'ioBroker (anglais/allemand écrits à la main, sinon traduits automatiquement).",
-				"it": "I nomi degli stati sono ora forniti in tutte le lingue di ioBroker (inglese/tedesco scritti a mano, altrimenti tradotti automaticamente).",
-				"es": "Los nombres de los estados ahora se proporcionan en todos los idiomas de ioBroker (escritos a mano en inglés/alemán, en caso contrario traducidos automáticamente).",
-				"pl": "Nazwy stanów są teraz dostępne we wszystkich językach ioBroker (pisane ręcznie w języku angielskim/niemieckim, w przeciwnym razie tłumaczone maszynowo).",
-				"uk": "Назви штатів тепер надаються всіма мовами ioBroker (написані від руки англійською/німецькою, інакше – з машинним перекладом).",
-				"zh-cn": "现在以所有 ioBroker 语言提供状态名称（手写英语/德语，否则由机器翻译）。"
-			},
-			"0.2.3": {
-				"en": "Object-tree compliance for the repository review: the heads container is now a folder (device→channel→state order), the switch states MM/LM/LFB/LPS/PM are real booleans (previously 0/1 numbers — adjust scripts that use them), corrected roles for GS/IS/MG and the UPS mode; object definitions now also update in place on existing installations.",
-				"de": "Objektbaum-Konformität für das Repository-Review: der heads-Container ist jetzt ein Ordner (device→channel→state-Reihenfolge), die Schalter-States MM/LM/LFB/LPS/PM sind echte Booleans (vorher 0/1-Zahlen — Skripte, die sie nutzen, anpassen), korrigierte Rollen für GS/IS/MG und den USV-Modus; Objektdefinitionen aktualisieren sich jetzt auch auf bestehenden Installationen.",
-				"ru": "Соответствие дерева объектов требованиям проверки репозитория: контейнер heads теперь является папкой (порядок устройство→канал→состояние), состояния переключателей MM/LM/LFB/LPS/PM теперь настоящие логические значения (ранее числа 0/1 — скорректируйте использующие их скрипты), исправлены роли для GS/IS/MG и режима ИБП; определения объектов теперь обновляются и в существующих установках.",
-				"pt": "Conformidade da árvore de objetos para a revisão do repositório: o contêiner heads agora é uma pasta (ordem dispositivo→canal→estado), os estados do switch MM/LM/LFB/LPS/PM são booleanos reais (anteriormente números 0/1 — ajuste scripts que os utilizam), funções corrigidas para GS/IS/MG e o modo UPS; as definições de objeto agora também são atualizadas nas instalações existentes.",
-				"nl": "Naleving van de objectboom voor de beoordeling van de repository: de hoofdcontainer is nu een map (apparaat → kanaal → statusvolgorde), de schakelaarstatussen MM/LM/LFB/LPS/PM zijn echte booleans (voorheen 0/1 cijfers - pas scripts aan die deze gebruiken), gecorrigeerde rollen voor GS/IS/MG en de UPS-modus; objectdefinities worden nu ook bijgewerkt op bestaande installaties.",
-				"fr": "Conformité de l'arborescence d'objets pour la révision du référentiel : le conteneur heads est maintenant un dossier (device→channel→state order), les états des commutateurs MM/LM/LFB/LPS/PM sont de vrais booléens (auparavant les nombres 0/1 — ajustez les scripts qui les utilisent), les rôles corrigés pour GS/IS/MG et le mode UPS ; Les définitions d'objets sont désormais également mises à jour sur les installations existantes.",
-				"it": "Conformità dell'albero degli oggetti per la revisione del repository: il contenitore delle teste è ora una cartella (dispositivo→canale→ordine dello stato), gli stati dello switch MM/LM/LFB/LPS/PM sono booleani reali (in precedenza numeri 0/1 - regolare gli script che li utilizzano), ruoli corretti per GS/IS/MG e modalità UPS; le definizioni degli oggetti ora vengono aggiornate anche sulle installazioni esistenti.",
-				"es": "Cumplimiento del árbol de objetos para la revisión del repositorio: el contenedor de encabezados ahora es una carpeta (dispositivo→canal→orden de estado), los estados del interruptor MM/LM/LFB/LPS/PM son booleanos reales (anteriormente números 0/1; ajuste los scripts que los usan), roles corregidos para GS/IS/MG y el modo UPS; Las definiciones de objetos ahora también se actualizan en las instalaciones existentes.",
-				"pl": "Zgodność drzewa obiektów dla przeglądu repozytorium: kontener głowic jest teraz folderem (urządzenie → kanał → kolejność stanów), stany przełączników MM/LM/LFB/LPS/PM są rzeczywistymi wartościami logicznymi (poprzednio liczby 0/1 — dostosuj skrypty, które ich używają), poprawione role dla GS/IS/MG i trybu UPS; definicje obiektów są teraz aktualizowane również w istniejących instalacjach.",
-				"uk": "Відповідність дереву об’єктів для перегляду сховища: контейнер heads тепер є папкою (пристрій→канал→порядок стану), стани перемикача MM/LM/LFB/LPS/PM є справжніми логічними значеннями (раніше числа 0/1 — налаштуйте сценарії, які їх використовують), виправлено ролі для GS/IS/MG і режиму UPS; визначення об’єктів тепер також оновлюються на місці наявних установок.",
-				"zh-cn": "存储库审查的对象树合规性：头容器现在是一个文件夹（设备→通道→状态顺序），开关状态 MM/LM/LFB/LPS/PM 是真正的布尔值（以前是 0/1 数字 - 调整使用它们的脚本），更正了 GS/IS/MG 和 UPS 模式的角色；对象定义现在也可以在现有安装上进行更新。"
-			},
-			"0.2.2": {
-				"en": "Repository-checker compliance: complete admin translations in all languages (including validator messages), translated release notes, jsonConfig schema fix for the test button and adapter-managed shutdown timer.",
-				"de": "Repochecker-Konformität: vollständige Admin-Übersetzungen in allen Sprachen (inkl. Validator-Meldungen), übersetzte Release-Notes, jsonConfig-Schema-Korrektur am Test-Knopf und adapter-verwalteter Timer beim Beenden.",
-				"ru": "Соответствие требованиям проверки репозитория: полные административные переводы на все языки (включая сообщения валидатора), переведенные примечания к выпуску, исправление схемы jsonConfig для кнопки тестирования и таймера выключения, управляемого адаптером.",
-				"pt": "Conformidade com o verificador de repositório: traduções administrativas completas em todos os idiomas (incluindo mensagens do validador), notas de versão traduzidas, correção de esquema jsonConfig para o botão de teste e temporizador de desligamento gerenciado pelo adaptador.",
-				"nl": "Naleving van de repositorychecker: volledige beheerdersvertalingen in alle talen (inclusief validatorberichten), vertaalde releaseopmerkingen, jsonConfig-schemafix voor de testknop en door de adapter beheerde afsluittimer.",
-				"fr": "Conformité au vérificateur de référentiel : traductions complètes de l'administrateur dans toutes les langues (y compris les messages du validateur), notes de version traduites, correctif du schéma jsonConfig pour le bouton de test et minuterie d'arrêt gérée par l'adaptateur.",
-				"it": "Conformità al controllo del repository: traduzioni complete dell'amministratore in tutte le lingue (inclusi i messaggi di convalida), note di rilascio tradotte, correzione dello schema jsonConfig per il pulsante di test e timer di spegnimento gestito dall'adattatore.",
-				"es": "Cumplimiento del verificador del repositorio: traducciones completas del administrador en todos los idiomas (incluidos los mensajes del validador), notas de la versión traducidas, corrección del esquema jsonConfig para el botón de prueba y temporizador de apagado administrado por el adaptador.",
-				"pl": "Zgodność ze modułem sprawdzania repozytoriów: pełne tłumaczenia administracyjne na wszystkie języki (w tym komunikaty modułu sprawdzania poprawności), przetłumaczone informacje o wersji, poprawka schematu jsonConfig dla przycisku testowego i licznika czasu zamykania zarządzanego przez adapter.",
-				"uk": "Відповідність засобу перевірки репозиторію: повні адміністративні переклади всіма мовами (включаючи повідомлення валідатора), перекладені примітки до випуску, виправлення схеми jsonConfig для тестової кнопки та таймера вимкнення, керованого адаптером.",
-				"zh-cn": "存储库检查器合规性：完成所有语言的管理翻译（包括验证器消息）、翻译的发行说明、测试按钮的 jsonConfig 架构修复和适配器管理的关闭计时器。"
-			},
-			"0.2.1": {
-				"en": "Controller robustness: config values of 0 are respected (gain/dead bands), per-head write isolation, anti-windup when a device limits internally, GS is neutralized to 0 when the controller stops. Heads are polled in parallel, the startup cleanup only touches adapter-managed objects, and manual GS writes are rejected while the controller is active.",
-				"de": "Regler-Robustheit: Config-Werte von 0 werden respektiert (Verstärkung/Totbänder), Schreibfehler pro Kopf isoliert, Anti-Windup bei interner Begrenzung des Geräts, GS wird beim Stoppen des Reglers auf 0 neutralisiert. Köpfe werden parallel abgefragt, das Aufräumen beim Start fasst nur adapter-verwaltete Objekte an, manuelle GS-Schreibvorgänge werden bei aktivem Regler abgelehnt.",
-				"ru": "Надежность контроллера: соблюдаются значения конфигурации 0 (зона усиления/мертвая зона), изоляция записи для каждой головки, защита от завершения при внутреннем ограничении устройства, GS нейтрализуется до 0 при остановке контроллера. Головки опрашиваются параллельно, очистка при запуске затрагивает только объекты, управляемые адаптером, а запись GS вручную отклоняется, пока контроллер активен.",
-				"pt": "Robustez do controlador: valores de configuração de 0 são respeitados (ganho/faixas mortas), isolamento de gravação por cabeça, anti-windup quando um dispositivo limita internamente, GS é neutralizado para 0 quando o controlador para. Os cabeçotes são pesquisados ​​em paralelo, a limpeza de inicialização afeta apenas os objetos gerenciados pelo adaptador e as gravações GS manuais são rejeitadas enquanto o controlador está ativo.",
-				"nl": "Robuustheid van de controller: configuratiewaarden van 0 worden gerespecteerd (versterking/dode banden), schrijfisolatie per kop, anti-windup wanneer een apparaat intern beperkt wordt, GS wordt geneutraliseerd naar 0 wanneer de controller stopt. Heads worden parallel ondervraagd, de opstartopschoning heeft alleen betrekking op door de adapter beheerde objecten, en handmatige GS-schrijfbewerkingen worden afgewezen terwijl de controller actief is.",
-				"fr": "Robustesse du contrôleur : les valeurs de configuration à 0 sont respectées (gain/bandes mortes), isolation en écriture par tête, anti-windup lorsqu'un appareil limite en interne, GS est neutralisé à 0 lorsque le contrôleur s'arrête. Les têtes sont interrogées en parallèle, le nettoyage au démarrage ne touche que les objets gérés par l'adaptateur et les écritures GS manuelles sont rejetées lorsque le contrôleur est actif.",
-				"it": "Robustezza del controller: vengono rispettati i valori di configurazione pari a 0 (guadagno/bande morte), isolamento in scrittura per testa, anti-windup quando un dispositivo limita internamente, GS viene neutralizzato a 0 quando il controller si ferma. Le testine vengono interrogate in parallelo, la pulizia all'avvio tocca solo gli oggetti gestiti dall'adattatore e le scritture GS manuali vengono rifiutate mentre il controller è attivo.",
-				"es": "Robustez del controlador: se respetan los valores de configuración de 0 (ganancia/bandas muertas), aislamiento de escritura por cabezal, anti-windup cuando un dispositivo limita internamente, GS se neutraliza a 0 cuando el controlador se detiene. Los cabezales se sondean en paralelo, la limpieza de inicio solo toca los objetos administrados por el adaptador y las escrituras GS manuales se rechazan mientras el controlador está activo.",
-				"pl": "Solidność kontrolera: przestrzegane są wartości konfiguracyjne 0 (wzmocnienie/martwe pasma), izolacja zapisu na każdą głowicę, zabezpieczenie przed windupem, gdy urządzenie ogranicza wewnętrznie, GS jest neutralizowane do 0, gdy kontroler się zatrzymuje. Głowice są odpytywane równolegle, czyszczenie przy uruchomieniu dotyczy tylko obiektów zarządzanych przez adapter, a ręczne zapisy GS są odrzucane, gdy kontroler jest aktywny.",
-				"uk": "Надійність контролера: дотримуються значення конфігурації 0 (зони підсилення/мертвої зони), ізоляція запису на головку, захист від перемотування, коли пристрій обмежує внутрішні, GS нейтралізується до 0, коли контролер зупиняється. Головки опитуються паралельно, очищення при запуску торкається лише об’єктів, керованих адаптером, а ручні записи GS відхиляються, поки контролер активний.",
-				"zh-cn": "控制器稳健性：遵循 0 的配置值（增益/死区）、每个磁头写入隔离、设备内部限制时的抗饱和、控制器停止时 GS 中和为 0。磁头并行轮询，启动清理仅涉及适配器管理的对象，并且在控制器处于活动状态时拒绝手动 GS 写入。"
-			},
-			"0.2.0": {
-				"en": "Multi-head support: manage up to three SunEnergyXT heads in one instance; the controller splits the grid setpoint across all heads. New per-head object tree (heads.N.*) and combined totals (total.*), plus a connection test button. Device self-regulation stays single-head only. Note: the object tree was restructured — re-create existing single-head instances.",
-				"de": "Mehrkopf-Unterstützung: bis zu drei SunEnergyXT-Köpfe in einer Instanz; der Regler verteilt den Netz-Sollwert auf alle Köpfe. Neuer Objektbaum pro Kopf (heads.N.*) und Summen (total.*), plus Verbindungs-Testknopf. Geräte-Eigenregelung nur mit einem Kopf. Hinweis: Objektbaum umstrukturiert — bestehende Einzelkopf-Instanzen neu anlegen.",
-				"ru": "Поддержка нескольких головок: управление до трех головок SunEnergyXT в одном экземпляре; контроллер распределяет заданное значение сети по всем головкам. Новое дерево объектов по головам (heads.N.*) и объединенные итоги (total.*), а также кнопка проверки соединения. Саморегулирование устройства остается только с одной головкой. Примечание: дерево объектов было реструктурировано — заново создайте существующие экземпляры с одной головкой.",
-				"pt": "Suporte para vários cabeçotes: gerencie até três cabeçotes SunEnergyXT em uma instância; o controlador divide o ponto de ajuste da rede em todos os cabeçotes. Nova árvore de objetos por cabeça (heads.N.*) e totais combinados (total.*), além de um botão de teste de conexão. A autorregulação do dispositivo permanece apenas com um único cabeçote. Nota: a árvore de objetos foi reestruturada — recriar instâncias single-head existentes.",
-				"nl": "Ondersteuning voor meerdere koppen: beheer maximaal drie SunEnergyXT-koppen in één keer; de controller verdeelt het netinstelpunt over alle koppen. Nieuwe objectboom per hoofd (heads.N.*) en gecombineerde totalen (total.*), plus een verbindingstestknop. Zelfregulering van het apparaat blijft alleen op één kop. Opmerking: de objectboom is geherstructureerd - maak bestaande exemplaren met één kop opnieuw.",
-				"fr": "Prise en charge de plusieurs têtes : gérez jusqu'à trois têtes SunEnergyXT en une seule instance ; le contrôleur répartit le point de consigne du réseau entre toutes les têtes. Nouvelle arborescence d'objets par tête (heads.N.*) et totaux combinés (total.*), plus un bouton de test de connexion. L'autorégulation de l'appareil reste à tête unique. Remarque : l'arborescence des objets a été restructurée : recréez les instances à tête unique existantes.",
-				"it": "Supporto multi-testa: gestisci fino a tre teste SunEnergyXT in un'unica istanza; il controller suddivide il setpoint di rete su tutte le teste. Nuovo albero degli oggetti per testa (teste.N.*) e totali combinati (totale.*), più un pulsante per il test della connessione. L'autoregolazione del dispositivo rimane solo monotesta. Nota: l'albero degli oggetti è stato ristrutturato: ricrea le istanze a testa singola esistenti.",
-				"es": "Soporte para múltiples cabezales: administre hasta tres cabezales SunEnergyXT en una sola instancia; el controlador divide el punto de ajuste de la red entre todos los cabezales. Nuevo árbol de objetos por cabeza (cabezas.N.*) y totales combinados (total.*), además de un botón de prueba de conexión. La autorregulación del dispositivo se mantiene en un solo cabezal. Nota: el árbol de objetos se reestructuró: vuelva a crear instancias de un solo cabezal existentes.",
-				"pl": "Obsługa wielu głowic: zarządzanie maksymalnie trzema głowicami SunEnergyXT w jednej instancji; sterownik dzieli wartość zadaną sieci na wszystkie głowice. Nowe drzewo obiektów na głowę (szt.N.*) i łączne sumy (ogółem.*), a także przycisk testu połączenia. Samoregulacja urządzenia pozostaje tylko w przypadku jednej głowicy. Uwaga: drzewo obiektów zostało przebudowane — odtwórz istniejące instancje jednogłowicowe.",
-				"uk": "Підтримка кількох головок: керуйте до трьох головок SunEnergyXT в одному екземплярі; контролер розподіляє задане значення мережі між усіма головками. Нове дерево об’єктів для кожної голови (heads.N.*) і комбіновані підсумки (total.*), а також кнопка перевірки підключення. Саморегуляція пристрою залишається тільки в одній головці. Примітка: дерево об’єктів було реструктуровано — повторно створіть існуючі одноголові екземпляри.",
-				"zh-cn": "多头支持：在一个实例中最多管理三个SunEnergyXT头；控制器将网格设定值分配给所有头。新的每个头对象树 (heads.N.*) 和组合总数 (total.*)，以及一个连接测试按钮。设备自我调节仅保持单头。注意：对象树已重组 - 重新创建现有的单头实例。"
-			}
-		},
-		"titleLang": {
-			"en": "SunEnergyXT 500",
-			"de": "SunEnergyXT 500",
-			"ru": "SunEnergyXT 500",
-			"pt": "SunEnergyXT 500",
-			"nl": "SunEnergyXT 500",
-			"fr": "SunEnergyXT 500",
-			"it": "SunEnergyXT500",
-			"es": "SunEnergyXT 500",
-			"pl": "SunEnergyXT 500",
-			"uk": "SunEnergyXT 500",
-			"zh-cn": "SunEnergyXT 500"
-		},
-		"desc": {
-			"en": "Integration and self-consumption control for SunEnergyXT 500 / 500 PRO battery storage systems via the local HTTP API",
-			"de": "Integration und Eigenverbrauchssteuerung für SunEnergyXT 500 / 500 PRO Batteriespeichersysteme über die lokale HTTP-API",
-			"ru": "Интеграция и контроль самостоятельного потребления аккумуляторных систем хранения SunEnergyXT 500/500 PRO через локальный HTTP API",
-			"pt": "Integração e controle de autoconsumo para sistemas de armazenamento de bateria SunEnergyXT 500/500 PRO através da API HTTP local",
-			"nl": "Integratie en controle van het eigen verbruik voor SunEnergyXT 500 / 500 PRO batterijopslagsystemen via de lokale HTTP API",
-			"fr": "Intégration et contrôle de l'autoconsommation des systèmes de stockage sur batterie SunEnergyXT 500 / 500 PRO via l'API HTTP locale",
-			"it": "Integrazione e controllo dell'autoconsumo per i sistemi di accumulo a batteria SunEnergyXT 500 / 500 PRO tramite API HTTP locale",
-			"es": "Integración y control de autoconsumo de los sistemas de almacenamiento en baterías SunEnergyXT 500 / 500 PRO mediante la API HTTP local",
-			"pl": "Integracja i kontrola zużycia własnego dla systemów magazynowania energii SunEnergyXT 500 / 500 PRO za pośrednictwem lokalnego API HTTP",
-			"uk": "Інтеграція та контроль самоспоживання для систем зберігання акумуляторів SunEnergyXT 500 / 500 PRO через локальний HTTP API",
-			"zh-cn": "通过本地 HTTP API 对 SunEnergyXT 500 / 500 PRO 电池存储系统进行集成和自消耗控制"
-		},
-		"authors": [
-			"Marcus Bortel (Creekhail) <marcus@bortel.de>"
-		],
-		"keywords": [
-			"sunenergyxt",
-			"battery",
-			"storage",
-			"solar",
-			"energy",
-			"self-consumption",
-			"local-api"
-		],
-		"licenseInformation": {
-			"type": "free",
-			"license": "MIT"
-		},
-		"platform": "Javascript/Node.js",
-		"icon": "sunenergyxt500.png",
-		"enabled": true,
-		"extIcon": "https://raw.githubusercontent.com/Creekhail/ioBroker.sunenergyxt500/main/admin/sunenergyxt500.png",
-		"readme": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md",
-		"loglevel": "info",
-		"tier": 3,
-		"mode": "daemon",
-		"type": "energy",
-		"compact": true,
-		"messagebox": true,
-		"connectionType": "local",
-		"dataSource": "poll",
-		"adminUI": {
-			"config": "json"
-		},
-		"dependencies": [
-			{
-				"js-controller": ">=6.0.11"
-			}
-		],
-		"globalDependencies": [
-			{
-				"admin": ">=7.6.20"
-			}
-		]
-	},
-	"native": {
-		"head1Host": "",
-		"head1Label": "",
-		"head2Host": "",
-		"head2Label": "",
-		"head3Host": "",
-		"head3Label": "",
-		"pollInterval": 5,
-		"requestTimeout": 8000,
-		"controlMode": "off",
-		"gridPowerStateId": "",
-		"gridPowerInverted": false,
-		"controllerGain": 0.3,
-		"controllerDeadBandW": 20,
-		"controllerMinIntervalMs": 5000,
-		"controllerWriteDeadBandW": 10,
-		"watchdogWarnSec": 30,
-		"watchdogFailsafeSec": 180,
-		"meterType": "shellypro3em",
-		"meterId": "",
-		"meterTasmotaSubtype": ""
-	},
-	"objects": [],
-	"instanceObjects": [
-		{
-			"_id": "info",
-			"type": "channel",
-			"common": {
-				"name": "Information"
-			},
-			"native": {}
-		},
-		{
-			"_id": "info.connection",
-			"type": "state",
-			"common": {
-				"role": "indicator.connected",
-				"name": "Device or service connected",
-				"type": "boolean",
-				"read": true,
-				"write": false,
-				"def": false
-			},
-			"native": {}
-		}
-	]
+  "common": {
+    "name": "sunenergyxt500",
+    "version": "0.2.5",
+    "news": {
+      "0.2.5": {
+        "en": "Review follow-up: manufacturer/product link in the README and the controller now only accepts acknowledged grid-power values (ack=true) from the meter state.",
+        "de": "Review-Nacharbeit: Hersteller-/Produktlink im README, und der Regler akzeptiert nur noch bestätigte Netzleistungswerte (ack=true) vom Zähler-State.",
+        "ru": "Последующие действия по проверке: ссылка на производителя/продукт в файле README и контроллер теперь принимают только подтвержденные значения мощности сети (ack=true) из состояния счетчика.",
+        "pt": "Acompanhamento da revisão: link fabricante/produto no README e o controlador agora aceita apenas valores de potência da rede reconhecidos (ack=true) do estado do medidor.",
+        "nl": "Evaluatie vervolg: fabrikant/productkoppeling in de README en de controller accepteert nu alleen erkende netvermogenswaarden (ack=true) van de meterstatus.",
+        "fr": "Suivi de l'examen : lien fabricant/produit dans le fichier README et le contrôleur n'accepte désormais que les valeurs de puissance du réseau reconnues (ack=true) à partir de l'état du compteur.",
+        "it": "Follow-up della revisione: il collegamento produttore/prodotto nel file README e il controller ora accetta solo valori di potenza di rete riconosciuti (ack=true) dallo stato del contatore.",
+        "es": "Seguimiento de la revisión: enlace fabricante/producto en el archivo README y el controlador ahora solo acepta valores de potencia de red reconocidos (ack=true) del estado del medidor.",
+        "pl": "Kontynuacja przeglądu: link do producenta/produktu w pliku README i sterownik akceptuje teraz tylko potwierdzone wartości mocy sieci (ack=true) ze stanu licznika.",
+        "uk": "Подальший перегляд: посилання на виробника/продукт у файлі README, і контролер тепер приймає лише підтверджені значення потужності мережі (ack=true) із стану лічильника.",
+        "zh-cn": "查看后续内容：自述文件中的制造商/产品链接和控制器现在仅接受来自仪表状态的已确认的电网功率值 (ack=true)。"
+      },
+      "0.2.4": {
+        "en": "State names are now provided in all ioBroker languages (hand-written English/German, machine-translated otherwise).",
+        "de": "State-Namen liegen jetzt in allen ioBroker-Sprachen vor (Englisch/Deutsch handgeschrieben, übrige maschinell übersetzt).",
+        "ru": "Названия состояний теперь предоставляются на всех языках ioBroker (рукописный английский/немецкий, в противном случае — машинный перевод).",
+        "pt": "Os nomes dos estados agora são fornecidos em todos os idiomas do ioBroker (escritos à mão em inglês/alemão, caso contrário, traduzidos automaticamente).",
+        "nl": "Staatsnamen worden nu in alle ioBroker-talen aangeboden (handgeschreven Engels/Duits, anders machinaal vertaald).",
+        "fr": "Les noms d'État sont désormais fournis dans toutes les langues d'ioBroker (anglais/allemand écrits à la main, sinon traduits automatiquement).",
+        "it": "I nomi degli stati sono ora forniti in tutte le lingue di ioBroker (inglese/tedesco scritti a mano, altrimenti tradotti automaticamente).",
+        "es": "Los nombres de los estados ahora se proporcionan en todos los idiomas de ioBroker (escritos a mano en inglés/alemán, en caso contrario traducidos automáticamente).",
+        "pl": "Nazwy stanów są teraz dostępne we wszystkich językach ioBroker (pisane ręcznie w języku angielskim/niemieckim, w przeciwnym razie tłumaczone maszynowo).",
+        "uk": "Назви штатів тепер надаються всіма мовами ioBroker (написані від руки англійською/німецькою, інакше – з машинним перекладом).",
+        "zh-cn": "现在以所有 ioBroker 语言提供状态名称（手写英语/德语，否则由机器翻译）。"
+      },
+      "0.2.3": {
+        "en": "Object-tree compliance for the repository review: the heads container is now a folder (device→channel→state order), the switch states MM/LM/LFB/LPS/PM are real booleans (previously 0/1 numbers — adjust scripts that use them), corrected roles for GS/IS/MG and the UPS mode; object definitions now also update in place on existing installations.",
+        "de": "Objektbaum-Konformität für das Repository-Review: der heads-Container ist jetzt ein Ordner (device→channel→state-Reihenfolge), die Schalter-States MM/LM/LFB/LPS/PM sind echte Booleans (vorher 0/1-Zahlen — Skripte, die sie nutzen, anpassen), korrigierte Rollen für GS/IS/MG und den USV-Modus; Objektdefinitionen aktualisieren sich jetzt auch auf bestehenden Installationen.",
+        "ru": "Соответствие дерева объектов требованиям проверки репозитория: контейнер heads теперь является папкой (порядок устройство→канал→состояние), состояния переключателей MM/LM/LFB/LPS/PM теперь настоящие логические значения (ранее числа 0/1 — скорректируйте использующие их скрипты), исправлены роли для GS/IS/MG и режима ИБП; определения объектов теперь обновляются и в существующих установках.",
+        "pt": "Conformidade da árvore de objetos para a revisão do repositório: o contêiner heads agora é uma pasta (ordem dispositivo→canal→estado), os estados do switch MM/LM/LFB/LPS/PM são booleanos reais (anteriormente números 0/1 — ajuste scripts que os utilizam), funções corrigidas para GS/IS/MG e o modo UPS; as definições de objeto agora também são atualizadas nas instalações existentes.",
+        "nl": "Naleving van de objectboom voor de beoordeling van de repository: de hoofdcontainer is nu een map (apparaat → kanaal → statusvolgorde), de schakelaarstatussen MM/LM/LFB/LPS/PM zijn echte booleans (voorheen 0/1 cijfers - pas scripts aan die deze gebruiken), gecorrigeerde rollen voor GS/IS/MG en de UPS-modus; objectdefinities worden nu ook bijgewerkt op bestaande installaties.",
+        "fr": "Conformité de l'arborescence d'objets pour la révision du référentiel : le conteneur heads est maintenant un dossier (device→channel→state order), les états des commutateurs MM/LM/LFB/LPS/PM sont de vrais booléens (auparavant les nombres 0/1 — ajustez les scripts qui les utilisent), les rôles corrigés pour GS/IS/MG et le mode UPS ; Les définitions d'objets sont désormais également mises à jour sur les installations existantes.",
+        "it": "Conformità dell'albero degli oggetti per la revisione del repository: il contenitore delle teste è ora una cartella (dispositivo→canale→ordine dello stato), gli stati dello switch MM/LM/LFB/LPS/PM sono booleani reali (in precedenza numeri 0/1 - regolare gli script che li utilizzano), ruoli corretti per GS/IS/MG e modalità UPS; le definizioni degli oggetti ora vengono aggiornate anche sulle installazioni esistenti.",
+        "es": "Cumplimiento del árbol de objetos para la revisión del repositorio: el contenedor de encabezados ahora es una carpeta (dispositivo→canal→orden de estado), los estados del interruptor MM/LM/LFB/LPS/PM son booleanos reales (anteriormente números 0/1; ajuste los scripts que los usan), roles corregidos para GS/IS/MG y el modo UPS; Las definiciones de objetos ahora también se actualizan en las instalaciones existentes.",
+        "pl": "Zgodność drzewa obiektów dla przeglądu repozytorium: kontener głowic jest teraz folderem (urządzenie → kanał → kolejność stanów), stany przełączników MM/LM/LFB/LPS/PM są rzeczywistymi wartościami logicznymi (poprzednio liczby 0/1 — dostosuj skrypty, które ich używają), poprawione role dla GS/IS/MG i trybu UPS; definicje obiektów są teraz aktualizowane również w istniejących instalacjach.",
+        "uk": "Відповідність дереву об’єктів для перегляду сховища: контейнер heads тепер є папкою (пристрій→канал→порядок стану), стани перемикача MM/LM/LFB/LPS/PM є справжніми логічними значеннями (раніше числа 0/1 — налаштуйте сценарії, які їх використовують), виправлено ролі для GS/IS/MG і режиму UPS; визначення об’єктів тепер також оновлюються на місці наявних установок.",
+        "zh-cn": "存储库审查的对象树合规性：头容器现在是一个文件夹（设备→通道→状态顺序），开关状态 MM/LM/LFB/LPS/PM 是真正的布尔值（以前是 0/1 数字 - 调整使用它们的脚本），更正了 GS/IS/MG 和 UPS 模式的角色；对象定义现在也可以在现有安装上进行更新。"
+      },
+      "0.2.2": {
+        "en": "Repository-checker compliance: complete admin translations in all languages (including validator messages), translated release notes, jsonConfig schema fix for the test button and adapter-managed shutdown timer.",
+        "de": "Repochecker-Konformität: vollständige Admin-Übersetzungen in allen Sprachen (inkl. Validator-Meldungen), übersetzte Release-Notes, jsonConfig-Schema-Korrektur am Test-Knopf und adapter-verwalteter Timer beim Beenden.",
+        "ru": "Соответствие требованиям проверки репозитория: полные административные переводы на все языки (включая сообщения валидатора), переведенные примечания к выпуску, исправление схемы jsonConfig для кнопки тестирования и таймера выключения, управляемого адаптером.",
+        "pt": "Conformidade com o verificador de repositório: traduções administrativas completas em todos os idiomas (incluindo mensagens do validador), notas de versão traduzidas, correção de esquema jsonConfig para o botão de teste e temporizador de desligamento gerenciado pelo adaptador.",
+        "nl": "Naleving van de repositorychecker: volledige beheerdersvertalingen in alle talen (inclusief validatorberichten), vertaalde releaseopmerkingen, jsonConfig-schemafix voor de testknop en door de adapter beheerde afsluittimer.",
+        "fr": "Conformité au vérificateur de référentiel : traductions complètes de l'administrateur dans toutes les langues (y compris les messages du validateur), notes de version traduites, correctif du schéma jsonConfig pour le bouton de test et minuterie d'arrêt gérée par l'adaptateur.",
+        "it": "Conformità al controllo del repository: traduzioni complete dell'amministratore in tutte le lingue (inclusi i messaggi di convalida), note di rilascio tradotte, correzione dello schema jsonConfig per il pulsante di test e timer di spegnimento gestito dall'adattatore.",
+        "es": "Cumplimiento del verificador del repositorio: traducciones completas del administrador en todos los idiomas (incluidos los mensajes del validador), notas de la versión traducidas, corrección del esquema jsonConfig para el botón de prueba y temporizador de apagado administrado por el adaptador.",
+        "pl": "Zgodność ze modułem sprawdzania repozytoriów: pełne tłumaczenia administracyjne na wszystkie języki (w tym komunikaty modułu sprawdzania poprawności), przetłumaczone informacje o wersji, poprawka schematu jsonConfig dla przycisku testowego i licznika czasu zamykania zarządzanego przez adapter.",
+        "uk": "Відповідність засобу перевірки репозиторію: повні адміністративні переклади всіма мовами (включаючи повідомлення валідатора), перекладені примітки до випуску, виправлення схеми jsonConfig для тестової кнопки та таймера вимкнення, керованого адаптером.",
+        "zh-cn": "存储库检查器合规性：完成所有语言的管理翻译（包括验证器消息）、翻译的发行说明、测试按钮的 jsonConfig 架构修复和适配器管理的关闭计时器。"
+      },
+      "0.2.1": {
+        "en": "Controller robustness: config values of 0 are respected (gain/dead bands), per-head write isolation, anti-windup when a device limits internally, GS is neutralized to 0 when the controller stops. Heads are polled in parallel, the startup cleanup only touches adapter-managed objects, and manual GS writes are rejected while the controller is active.",
+        "de": "Regler-Robustheit: Config-Werte von 0 werden respektiert (Verstärkung/Totbänder), Schreibfehler pro Kopf isoliert, Anti-Windup bei interner Begrenzung des Geräts, GS wird beim Stoppen des Reglers auf 0 neutralisiert. Köpfe werden parallel abgefragt, das Aufräumen beim Start fasst nur adapter-verwaltete Objekte an, manuelle GS-Schreibvorgänge werden bei aktivem Regler abgelehnt.",
+        "ru": "Надежность контроллера: соблюдаются значения конфигурации 0 (зона усиления/мертвая зона), изоляция записи для каждой головки, защита от завершения при внутреннем ограничении устройства, GS нейтрализуется до 0 при остановке контроллера. Головки опрашиваются параллельно, очистка при запуске затрагивает только объекты, управляемые адаптером, а запись GS вручную отклоняется, пока контроллер активен.",
+        "pt": "Robustez do controlador: valores de configuração de 0 são respeitados (ganho/faixas mortas), isolamento de gravação por cabeça, anti-windup quando um dispositivo limita internamente, GS é neutralizado para 0 quando o controlador para. Os cabeçotes são pesquisados ​​em paralelo, a limpeza de inicialização afeta apenas os objetos gerenciados pelo adaptador e as gravações GS manuais são rejeitadas enquanto o controlador está ativo.",
+        "nl": "Robuustheid van de controller: configuratiewaarden van 0 worden gerespecteerd (versterking/dode banden), schrijfisolatie per kop, anti-windup wanneer een apparaat intern beperkt wordt, GS wordt geneutraliseerd naar 0 wanneer de controller stopt. Heads worden parallel ondervraagd, de opstartopschoning heeft alleen betrekking op door de adapter beheerde objecten, en handmatige GS-schrijfbewerkingen worden afgewezen terwijl de controller actief is.",
+        "fr": "Robustesse du contrôleur : les valeurs de configuration à 0 sont respectées (gain/bandes mortes), isolation en écriture par tête, anti-windup lorsqu'un appareil limite en interne, GS est neutralisé à 0 lorsque le contrôleur s'arrête. Les têtes sont interrogées en parallèle, le nettoyage au démarrage ne touche que les objets gérés par l'adaptateur et les écritures GS manuelles sont rejetées lorsque le contrôleur est actif.",
+        "it": "Robustezza del controller: vengono rispettati i valori di configurazione pari a 0 (guadagno/bande morte), isolamento in scrittura per testa, anti-windup quando un dispositivo limita internamente, GS viene neutralizzato a 0 quando il controller si ferma. Le testine vengono interrogate in parallelo, la pulizia all'avvio tocca solo gli oggetti gestiti dall'adattatore e le scritture GS manuali vengono rifiutate mentre il controller è attivo.",
+        "es": "Robustez del controlador: se respetan los valores de configuración de 0 (ganancia/bandas muertas), aislamiento de escritura por cabezal, anti-windup cuando un dispositivo limita internamente, GS se neutraliza a 0 cuando el controlador se detiene. Los cabezales se sondean en paralelo, la limpieza de inicio solo toca los objetos administrados por el adaptador y las escrituras GS manuales se rechazan mientras el controlador está activo.",
+        "pl": "Solidność kontrolera: przestrzegane są wartości konfiguracyjne 0 (wzmocnienie/martwe pasma), izolacja zapisu na każdą głowicę, zabezpieczenie przed windupem, gdy urządzenie ogranicza wewnętrznie, GS jest neutralizowane do 0, gdy kontroler się zatrzymuje. Głowice są odpytywane równolegle, czyszczenie przy uruchomieniu dotyczy tylko obiektów zarządzanych przez adapter, a ręczne zapisy GS są odrzucane, gdy kontroler jest aktywny.",
+        "uk": "Надійність контролера: дотримуються значення конфігурації 0 (зони підсилення/мертвої зони), ізоляція запису на головку, захист від перемотування, коли пристрій обмежує внутрішні, GS нейтралізується до 0, коли контролер зупиняється. Головки опитуються паралельно, очищення при запуску торкається лише об’єктів, керованих адаптером, а ручні записи GS відхиляються, поки контролер активний.",
+        "zh-cn": "控制器稳健性：遵循 0 的配置值（增益/死区）、每个磁头写入隔离、设备内部限制时的抗饱和、控制器停止时 GS 中和为 0。磁头并行轮询，启动清理仅涉及适配器管理的对象，并且在控制器处于活动状态时拒绝手动 GS 写入。"
+      },
+      "0.2.0": {
+        "en": "Multi-head support: manage up to three SunEnergyXT heads in one instance; the controller splits the grid setpoint across all heads. New per-head object tree (heads.N.*) and combined totals (total.*), plus a connection test button. Device self-regulation stays single-head only. Note: the object tree was restructured — re-create existing single-head instances.",
+        "de": "Mehrkopf-Unterstützung: bis zu drei SunEnergyXT-Köpfe in einer Instanz; der Regler verteilt den Netz-Sollwert auf alle Köpfe. Neuer Objektbaum pro Kopf (heads.N.*) und Summen (total.*), plus Verbindungs-Testknopf. Geräte-Eigenregelung nur mit einem Kopf. Hinweis: Objektbaum umstrukturiert — bestehende Einzelkopf-Instanzen neu anlegen.",
+        "ru": "Поддержка нескольких головок: управление до трех головок SunEnergyXT в одном экземпляре; контроллер распределяет заданное значение сети по всем головкам. Новое дерево объектов по головам (heads.N.*) и объединенные итоги (total.*), а также кнопка проверки соединения. Саморегулирование устройства остается только с одной головкой. Примечание: дерево объектов было реструктурировано — заново создайте существующие экземпляры с одной головкой.",
+        "pt": "Suporte para vários cabeçotes: gerencie até três cabeçotes SunEnergyXT em uma instância; o controlador divide o ponto de ajuste da rede em todos os cabeçotes. Nova árvore de objetos por cabeça (heads.N.*) e totais combinados (total.*), além de um botão de teste de conexão. A autorregulação do dispositivo permanece apenas com um único cabeçote. Nota: a árvore de objetos foi reestruturada — recriar instâncias single-head existentes.",
+        "nl": "Ondersteuning voor meerdere koppen: beheer maximaal drie SunEnergyXT-koppen in één keer; de controller verdeelt het netinstelpunt over alle koppen. Nieuwe objectboom per hoofd (heads.N.*) en gecombineerde totalen (total.*), plus een verbindingstestknop. Zelfregulering van het apparaat blijft alleen op één kop. Opmerking: de objectboom is geherstructureerd - maak bestaande exemplaren met één kop opnieuw.",
+        "fr": "Prise en charge de plusieurs têtes : gérez jusqu'à trois têtes SunEnergyXT en une seule instance ; le contrôleur répartit le point de consigne du réseau entre toutes les têtes. Nouvelle arborescence d'objets par tête (heads.N.*) et totaux combinés (total.*), plus un bouton de test de connexion. L'autorégulation de l'appareil reste à tête unique. Remarque : l'arborescence des objets a été restructurée : recréez les instances à tête unique existantes.",
+        "it": "Supporto multi-testa: gestisci fino a tre teste SunEnergyXT in un'unica istanza; il controller suddivide il setpoint di rete su tutte le teste. Nuovo albero degli oggetti per testa (teste.N.*) e totali combinati (totale.*), più un pulsante per il test della connessione. L'autoregolazione del dispositivo rimane solo monotesta. Nota: l'albero degli oggetti è stato ristrutturato: ricrea le istanze a testa singola esistenti.",
+        "es": "Soporte para múltiples cabezales: administre hasta tres cabezales SunEnergyXT en una sola instancia; el controlador divide el punto de ajuste de la red entre todos los cabezales. Nuevo árbol de objetos por cabeza (cabezas.N.*) y totales combinados (total.*), además de un botón de prueba de conexión. La autorregulación del dispositivo se mantiene en un solo cabezal. Nota: el árbol de objetos se reestructuró: vuelva a crear instancias de un solo cabezal existentes.",
+        "pl": "Obsługa wielu głowic: zarządzanie maksymalnie trzema głowicami SunEnergyXT w jednej instancji; sterownik dzieli wartość zadaną sieci na wszystkie głowice. Nowe drzewo obiektów na głowę (szt.N.*) i łączne sumy (ogółem.*), a także przycisk testu połączenia. Samoregulacja urządzenia pozostaje tylko w przypadku jednej głowicy. Uwaga: drzewo obiektów zostało przebudowane — odtwórz istniejące instancje jednogłowicowe.",
+        "uk": "Підтримка кількох головок: керуйте до трьох головок SunEnergyXT в одному екземплярі; контролер розподіляє задане значення мережі між усіма головками. Нове дерево об’єктів для кожної голови (heads.N.*) і комбіновані підсумки (total.*), а також кнопка перевірки підключення. Саморегуляція пристрою залишається тільки в одній головці. Примітка: дерево об’єктів було реструктуровано — повторно створіть існуючі одноголові екземпляри.",
+        "zh-cn": "多头支持：在一个实例中最多管理三个SunEnergyXT头；控制器将网格设定值分配给所有头。新的每个头对象树 (heads.N.*) 和组合总数 (total.*)，以及一个连接测试按钮。设备自我调节仅保持单头。注意：对象树已重组 - 重新创建现有的单头实例。"
+      }
+    },
+    "titleLang": {
+      "en": "SunEnergyXT 500",
+      "de": "SunEnergyXT 500",
+      "ru": "SunEnergyXT 500",
+      "pt": "SunEnergyXT 500",
+      "nl": "SunEnergyXT 500",
+      "fr": "SunEnergyXT 500",
+      "it": "SunEnergyXT500",
+      "es": "SunEnergyXT 500",
+      "pl": "SunEnergyXT 500",
+      "uk": "SunEnergyXT 500",
+      "zh-cn": "SunEnergyXT 500"
+    },
+    "desc": {
+      "en": "Integration and self-consumption control for SunEnergyXT 500 / 500 PRO battery storage systems via the local HTTP API",
+      "de": "Integration und Eigenverbrauchssteuerung für SunEnergyXT 500 / 500 PRO Batteriespeichersysteme über die lokale HTTP-API",
+      "ru": "Интеграция и контроль самостоятельного потребления аккумуляторных систем хранения SunEnergyXT 500/500 PRO через локальный HTTP API",
+      "pt": "Integração e controle de autoconsumo para sistemas de armazenamento de bateria SunEnergyXT 500/500 PRO através da API HTTP local",
+      "nl": "Integratie en controle van het eigen verbruik voor SunEnergyXT 500 / 500 PRO batterijopslagsystemen via de lokale HTTP API",
+      "fr": "Intégration et contrôle de l'autoconsommation des systèmes de stockage sur batterie SunEnergyXT 500 / 500 PRO via l'API HTTP locale",
+      "it": "Integrazione e controllo dell'autoconsumo per i sistemi di accumulo a batteria SunEnergyXT 500 / 500 PRO tramite API HTTP locale",
+      "es": "Integración y control de autoconsumo de los sistemas de almacenamiento en baterías SunEnergyXT 500 / 500 PRO mediante la API HTTP local",
+      "pl": "Integracja i kontrola zużycia własnego dla systemów magazynowania energii SunEnergyXT 500 / 500 PRO za pośrednictwem lokalnego API HTTP",
+      "uk": "Інтеграція та контроль самоспоживання для систем зберігання акумуляторів SunEnergyXT 500 / 500 PRO через локальний HTTP API",
+      "zh-cn": "通过本地 HTTP API 对 SunEnergyXT 500 / 500 PRO 电池存储系统进行集成和自消耗控制"
+    },
+    "authors": [
+      "Marcus Bortel (Creekhail) <marcus@bortel.de>"
+    ],
+    "keywords": [
+      "sunenergyxt",
+      "battery",
+      "storage",
+      "solar",
+      "energy",
+      "self-consumption",
+      "local-api"
+    ],
+    "licenseInformation": {
+      "type": "free",
+      "license": "MIT"
+    },
+    "platform": "Javascript/Node.js",
+    "icon": "sunenergyxt500.png",
+    "enabled": true,
+    "extIcon": "https://raw.githubusercontent.com/Creekhail/ioBroker.sunenergyxt500/main/admin/sunenergyxt500.png",
+    "readme": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md",
+    "loglevel": "info",
+    "tier": 3,
+    "mode": "daemon",
+    "type": "energy",
+    "compact": true,
+    "messagebox": true,
+    "connectionType": "local",
+    "dataSource": "poll",
+    "adminUI": {
+      "config": "json"
+    },
+    "dependencies": [
+      {
+        "js-controller": ">=6.0.11"
+      }
+    ],
+    "globalDependencies": [
+      {
+        "admin": ">=7.8.23"
+      }
+    ]
+  },
+  "native": {
+    "head1Host": "",
+    "head1Label": "",
+    "head2Host": "",
+    "head2Label": "",
+    "head3Host": "",
+    "head3Label": "",
+    "pollInterval": 5,
+    "requestTimeout": 8000,
+    "controlMode": "off",
+    "gridPowerStateId": "",
+    "gridPowerInverted": false,
+    "controllerGain": 0.3,
+    "controllerDeadBandW": 20,
+    "controllerMinIntervalMs": 5000,
+    "controllerWriteDeadBandW": 10,
+    "watchdogWarnSec": 30,
+    "watchdogFailsafeSec": 180,
+    "meterType": "shellypro3em",
+    "meterId": "",
+    "meterTasmotaSubtype": ""
+  },
+  "objects": [],
+  "instanceObjects": [
+    {
+      "_id": "info",
+      "type": "channel",
+      "common": {
+        "name": "Information"
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.connection",
+      "type": "state",
+      "common": {
+        "role": "indicator.connected",
+        "name": "Device or service connected",
+        "type": "boolean",
+        "read": true,
+        "write": false,
+        "def": false
+      },
+      "native": {}
+    }
+  ]
 }
