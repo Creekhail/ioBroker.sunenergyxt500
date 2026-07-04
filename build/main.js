@@ -300,7 +300,7 @@ class Sunenergyxt500 extends utils.Adapter {
   /**
    * Ensures a channel object exists for every parent path of the given ids.
    *
-   * @param ids
+   * @param ids relative state ids whose ancestor channels must exist
    */
   async ensureChannels(ids) {
     const parents = /* @__PURE__ */ new Set();
@@ -540,7 +540,7 @@ class Sunenergyxt500 extends utils.Adapter {
   /**
    * Persists whether the adapter currently holds a meter binding (device mode).
    *
-   * @param bound
+   * @param bound true while the adapter-created binding is active on the device
    */
   async setMeterBoundByAdapter(bound) {
     await this.setStateAsync("info.meterBound", { val: bound, ack: true });
@@ -723,8 +723,10 @@ class Sunenergyxt500 extends utils.Adapter {
       return;
     }
     const cfg = {
+      targetW: Math.max(-200, Math.min(200, (0, import_states.cfgNum)(this.config.controllerTargetW, 0))),
       gain: (0, import_states.cfgNum)(this.config.controllerGain, 0.3),
       deadBandW: Math.max(0, (0, import_states.cfgNum)(this.config.controllerDeadBandW, 20)),
+      maxStepW: Math.max(0, (0, import_states.cfgNum)(this.config.controllerMaxStepW, 500)),
       minIntervalMs: Math.max(1e3, (0, import_states.cfgNum)(this.config.controllerMinIntervalMs, 5e3)),
       writeDeadBandW: Math.max(0, (0, import_states.cfgNum)(this.config.controllerWriteDeadBandW, 10)),
       inverted: !!this.config.gridPowerInverted,

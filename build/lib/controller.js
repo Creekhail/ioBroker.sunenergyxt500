@@ -49,6 +49,12 @@ const WATCHDOG_INTERVAL_MS = 15e3;
 const SYNC_DEVIATION_W = 150;
 const SYNC_MIN_AGE_MS = 1e4;
 class MultiHeadController {
+  /**
+   * @param adapter the adapter instance (logging, states, timers)
+   * @param hooks head snapshot and GS write callbacks provided by the adapter
+   * @param gridStateId foreign state id of the grid-power source (watchdog checks its age)
+   * @param cfg controller tuning parameters
+   */
   constructor(adapter, hooks, gridStateId, cfg) {
     this.adapter = adapter;
     this.hooks = hooks;
@@ -70,6 +76,7 @@ class MultiHeadController {
     this.adapter.log.info("Multi-head controller started \u2014 all heads GS=0.");
     this.watchdogTimer = this.adapter.setInterval(() => void this.watchdogTick(), WATCHDOG_INTERVAL_MS);
   }
+  /** Stops the watchdog; no further writes are issued by this instance. */
   stop() {
     if (this.watchdogTimer) {
       this.adapter.clearInterval(this.watchdogTimer);
@@ -109,7 +116,8 @@ class MultiHeadController {
     if (now - this.lastWriteTime < this.cfg.minIntervalMs) {
       return;
     }
-    if (Math.abs(gridPower) < this.cfg.deadBandW) {
+    const error = gridPower - this.cfg.targetW;
+    if (Math.abs(error) < this.cfg.deadBandW) {
       return;
     }
     const heads = this.hooks.getHeads().filter((h) => h.online);
@@ -124,7 +132,12 @@ class MultiHeadController {
       0
     );
     const sumMax = heads.reduce((acc, h) => acc + Math.abs(h.maxPower), 0);
-    const totalTarget = (0, import_split.computeTotalTarget)(base, gridPower, this.cfg.gain, sumMax);
+    let totalTarget = (0, import_split.computeTotalTarget)(base, error, this.cfg.gain, sumMax);
+    if (this.cfg.maxStepW > 0) {
+      const lo = Math.max(base - this.cfg.maxStepW, -sumMax);
+      const hi = Math.min(base + this.cfg.maxStepW, sumMax);
+      totalTarget = Math.round(Math.max(lo, Math.min(hi, totalTarget)));
+    }
     const setpoints = (0, import_split.splitTarget)(totalTarget, heads);
     this.writeInProgress = true;
     try {

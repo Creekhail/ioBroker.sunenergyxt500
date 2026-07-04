@@ -71,6 +71,8 @@ In beiden Steuermodi **besitzt der Adapter `MM`**: bei jedem Poll prüft er das 
 
 *Adapter-Regler* (Modus B) — Felder:
 * **Quell-State Netzleistung** — ein Fremd-State mit der Netzleistung deines Hauszählers. Konvention: `>0` = Netzbezug, `<0` = Einspeisung. **Vorzeichen invertieren** aktivieren, falls dein Zähler die umgekehrte Konvention nutzt.
+* **Ziel-Netzleistung** (W, Standard 0): 0 = Nulleinspeisung; positive Werte halten bewusst einen kleinen Netzbezug (nie einspeisen), negative eine kleine Einspeisung — gleiche Vorzeichenkonvention wie der Quell-State (`>0` = Bezug).
+* **Max. Änderung pro Korrektur** (W, Standard 500, 0 = unbegrenzt): begrenzt, wie weit sich der Sollwert pro Regelschritt bewegt — hohe Verstärkung kann so bei Zähler-Ausreißern nicht überschwingen.
 * **Verstärkung** (Standard 0.3), **Totband** (W), **Min. Schreibintervall** (ms), **Per-Kopf-Schreib-Totband** (W — minimale Änderung des Kopf-Sollwerts, bevor er erneut geschrieben wird, gegen Zappeln bei sich verschiebender Aufteilung). Die Maximalleistung jedes Kopfes wird **automatisch** vom Gerät erkannt (800 W beim 500, 2400 W beim 500 PRO), Mischbetrieb funktioniert also ohne Zusatzkonfiguration.
 * **Watchdog Warnung / Failsafe (s)** — wird die Netzquelle zu alt, loggt der Regler eine Warnung und erzwingt schließlich `GS=0` auf **allen Köpfen** (sicherer Neutralzustand), bis die Quelle zurück ist. Watchdog-Telemetrie liegt unter `controller.*`.
 
@@ -88,16 +90,18 @@ Der Adapter bindet den Zähler (`MM=1` + `MD`) und das Gerät regelt selbst; der
 
 **Was du erwarten kannst:** Der Regler hält die Netzleistung in einem Band von typisch **±10–20 W um den Nullpunkt** und regelt Lastsprünge — je nach Einstellungen — innerhalb von **~1–3 Sekunden bis ~30 Sekunden** aus. Eine dauerhafte, exakte 0,0 W ist **prinzipbedingt nicht erreichbar** — mit keiner Regelung auf dieser Hardware:
 
-* **10-W-Schritte:** Das Gerät stellt den Netz-Sollwert `GS` nur in Schritten von 10 W — feiner kann keine Software regeln.
+* **Zähler-Genauigkeit und Rauschen:** Der externe Zähler selbst misst mit einigen Watt Toleranz und Rauschen — feiner zu regeln ist sinnlos. (Der `GS`-Sollwert hat 1-W-Auflösung, die Stellgranularität ist also nicht die Grenze.)
 * **Messketten-Latenz:** Zähler misst → ioBroker-State → Regler → `/write` → Gerät rampt. Zwischen Lastsprung und Korrektur vergehen unvermeidbar ~1–3 Sekunden.
 * **Lastdynamik:** Ein Kompressor oder Wasserkocher springt in Millisekunden an — jede Regelung reagiert danach. Kurze Leistungsspitzen im Diagramm sind normal und energetisch bedeutungslos (Wattsekunden).
-* Der Regler zielt auf 0 und pendelt daher **symmetrisch** um die Null — kurze, kleine Einspeise-Momente gehören dazu.
+* Der Regler regelt auf die eingestellte **Ziel-Netzleistung** (Standard 0) und pendelt **symmetrisch** darum — kurze, kleine Einspeise-Momente gehören zur Nulleinspeisung dazu. Wer nie einspeisen will, setzt das Ziel auf einen kleinen bewussten Bezug (z. B. +10 W).
 
 **Wie die Einstellungen wirken:**
 
 | Einstellung | Wirkung | kleiner Wert | größerer Wert |
 |---|---|---|---|
 | **Verstärkung** | Anteil der Abweichung, der pro Schritt korrigiert wird | träge, glatt (0,3 ≈ 7 Schritte bis ~0) | schnell (1,0 = eine Korrektur), reagiert aber härter auf Messrauschen; >1 kann überschwingen |
+| **Ziel-Netzleistung (W)** | der Wert, auf den die Netzleistung geregelt wird | <0 = bewusste Einspeisung | >0 = bewusster Bezug („nie einspeisen") |
+| **Max. Änderung pro Korrektur (W)** | begrenzt die Sollwert-Bewegung pro Schritt | zähmt Zähler-Ausreißer bei hoher Verstärkung | größer (oder 0 = unbegrenzt) reagiert schneller auf große Lastsprünge |
 | **Totband (W)** | Abweichungen darunter werden ignoriert | präziser, mehr Schreibvorgänge (0 = alles korrigieren) | ruhiger, lässt kleine Dauerabweichung stehen |
 | **Min. Schreibintervall** | Takt der Korrekturen | schnelleres Ausregeln (Untergrenze 1000 ms) | weniger Gerätezugriffe, langsameres Nachführen |
 | **Per-Kopf-Schreib-Totband** | unterdrückt Mini-Umverteilungen zwischen Köpfen (Mehrkopf) | präziser | weniger Zappeln |
@@ -108,7 +112,7 @@ Der Adapter bindet den Zähler (`MM=1` + `MD`) und das Gerät regelt selbst; der
 
 * `GP` (Netzleistung): `>0` = Einspeisung, `<0` = Bezug — **entgegengesetzt zu einem Shelly-Zähler** (`api.GP ≈ −shelly.gridPower`).
 * `BP` (Batterieleistung): `>0` = Laden, `<0` = Entladen.
-* `GS` (Netz-Sollwert): `>0` = Einspeisung/Entladen, `<0` = Netzladen (±2400 W beim Pro, 10-W-Schritte).
+* `GS` (Netz-Sollwert): `>0` = Einspeisung/Entladen, `<0` = Netzladen (±2400 W beim Pro, 1-W-Auflösung).
 
 ## Objektbaum
 
@@ -176,7 +180,7 @@ Die Roh-Felder bleiben für Experten-/Handbetrieb schreibbar (z. B. im *Aus*-Mod
 * **`info.connection` bleibt `false` / keine Daten:** stelle zuerst sicher, dass der **lokale Modus (`LM=1`)** am Gerät aktiviert ist — ohne ihn liefert die lokale API keine Werte. Prüfe dann, ob `http://<geräte-ip>/read` vom ioBroker-Host erreichbar ist (mit Browser oder `curl` testen). Pro Kopf zeigen `heads.<n>.info.online` und `heads.<n>.info.lastError`, welcher ausfällt.
 * **Es wird nichts gesteuert:** prüfe den **Steuermodus** — *Aus* schreibt nie. Im *Adapter-Regler* einen gültigen **Quell-State Netzleistung** setzen; in *Geräte-Eigenregelung* einen unterstützten **Zählertyp** und **SN/IP**.
 * **Gerät ignoriert `GS` / Akku reagiert nicht:** ein Kopf führt ein geschriebenes `GS` nur bei `MM=0` aus. Im *Adapter-Regler*-Modus erzwingt der Adapter das; wenn du `GS` manuell schreibst, stelle sicher, dass kein Zähler gebunden ist (`MM=0`). Mit gebundenem Zähler (`MM=1`) regelt das Gerät selbst und ignoriert `GS`.
-* **Der Regler ist zu langsam / erreicht nie exakt 0:** siehe *Regelverhalten, Genauigkeit und Grenzen* — das Gerät stellt `GS` in 10-W-Schritten und die Messkette bringt ~1–3 s Latenz mit, ein Band von ±10–20 W um die Null ist das physikalische Optimum. Für die schnellste Reaktion das *Präzise*-Profil nutzen (Verstärkung 0,8–1,0, Totband 0, min. Schreibintervall 1000 ms).
+* **Der Regler ist zu langsam / erreicht nie exakt 0:** siehe *Regelverhalten, Genauigkeit und Grenzen* — die Messkette bringt ~1–3 s Latenz mit und der Zähler misst mit endlicher Genauigkeit, ein Band von ±10–20 W um das Ziel ist das physikalische Optimum. Für die schnellste Reaktion das *Präzise*-Profil nutzen (Verstärkung 0,8–1,0, Totband 0, min. Schreibintervall 1000 ms); wer nie einspeisen will, setzt die **Ziel-Netzleistung** auf einen kleinen positiven Bezug.
 * **Zwei Regler kämpfen um den Akku:** nur einen laufen lassen. Der Adapter erzwingt `MM` für den gewählten Modus — deaktiviere ein externes `GS`-Skript (oder den geräteeigenen `MM` mit anderem Zähler), bevor du einen Steuermodus nutzt.
 * **Manche States bleiben leer (`0` / `""`):** ein Gerät liefert nur die Felder, die seine Firmware/Topologie tatsächlich bereitstellt (z. B. weitere Packs `SC2`–`SC5` oder Fehler-Bitmasks nur im Fehlerfall). Die komplette Rohantwort steht immer in `heads.<n>.info.rawResponse`.
 * **Nach dem Update von einer Einzelkopf-Version sieht der Baum falsch aus:** der Objektbaum wurde in 0.2.0 auf `heads.<n>.*` umgestellt. Der Adapter entfernt veraltete Objekte beim Start automatisch; bleibt doch etwas übrig, die alten Objekte löschen (oder die Instanz neu anlegen).

@@ -826,8 +826,10 @@ class Sunenergyxt500 extends utils.Adapter {
 		}
 		// cfgNum keeps explicit zeros (gain/dead bands of 0 must not become defaults).
 		const cfg: ControllerConfig = {
+			targetW: Math.max(-200, Math.min(200, cfgNum(this.config.controllerTargetW, 0))),
 			gain: cfgNum(this.config.controllerGain, 0.3),
 			deadBandW: Math.max(0, cfgNum(this.config.controllerDeadBandW, 20)),
+			maxStepW: Math.max(0, cfgNum(this.config.controllerMaxStepW, 500)),
 			minIntervalMs: Math.max(1000, cfgNum(this.config.controllerMinIntervalMs, 5000)),
 			writeDeadBandW: Math.max(0, cfgNum(this.config.controllerWriteDeadBandW, 10)),
 			inverted: !!this.config.gridPowerInverted,

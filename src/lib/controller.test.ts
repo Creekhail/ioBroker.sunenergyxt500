@@ -79,8 +79,10 @@ function head(partial: Partial<HeadState> & { index: number }): HeadState {
  */
 function cfg(partial: Partial<ControllerConfig> = {}): ControllerConfig {
 	return {
+		targetW: 0,
 		gain: 1,
 		deadBandW: 0,
+		maxStepW: 0,
 		minIntervalMs: 0,
 		writeDeadBandW: 0,
 		inverted: false,
@@ -128,6 +130,52 @@ describe('MultiHeadController', () => {
 		await ctrl.onGridPower(500); // base 500 → 750
 		await ctrl.onGridPower(250); // base 750 → 875
 		expect(writes.map(w => w.gs)).to.deep.equal([500, 750, 875]);
+	});
+
+	it('regulates towards a configured target grid power (deliberate draw)', async () => {
+		const heads = [head({ index: 1 })];
+		const { hooks, writes } = mockHooks(heads);
+		const ctrl = new MultiHeadController(
+			mockAdapter().adapter,
+			hooks,
+			'x.y.z',
+			cfg({ targetW: 100, writeDeadBandW: 1 }),
+		);
+		await ctrl.start();
+		writes.length = 0;
+		await ctrl.onGridPower(300); // 200 W above the 100 W draw target → discharge 200 W
+		expect(writes).to.deep.equal([{ index: 1, gs: 200 }]);
+		await ctrl.onGridPower(100); // exactly on target → no change
+		expect(writes.length).to.equal(1);
+	});
+
+	it('caps the setpoint movement per correction (step limit)', async () => {
+		const heads = [head({ index: 1 })];
+		const { hooks, writes } = mockHooks(heads);
+		const ctrl = new MultiHeadController(
+			mockAdapter().adapter,
+			hooks,
+			'x.y.z',
+			cfg({ maxStepW: 200, writeDeadBandW: 1 }),
+		);
+		await ctrl.start();
+		writes.length = 0;
+		await ctrl.onGridPower(1000); // raw target 1000, capped to base 0 + 200
+		await ctrl.onGridPower(800); // raw target 200+800=1000, capped to 200 + 200
+		expect(writes).to.deep.equal([
+			{ index: 1, gs: 200 },
+			{ index: 1, gs: 400 },
+		]);
+	});
+
+	it('does not cap when the step limit is 0 (unlimited)', async () => {
+		const heads = [head({ index: 1 })];
+		const { hooks, writes } = mockHooks(heads);
+		const ctrl = new MultiHeadController(mockAdapter().adapter, hooks, 'x.y.z', cfg({ maxStepW: 0 }));
+		await ctrl.start();
+		writes.length = 0;
+		await ctrl.onGridPower(1000);
+		expect(writes).to.deep.equal([{ index: 1, gs: 1000 }]);
 	});
 
 	it('respects an explicit dead band of zero and a configured one', async () => {

@@ -29,10 +29,17 @@ import type { LocalizedName } from './states';
 
 /** Tuning parameters of the self-consumption controller. */
 export interface ControllerConfig {
+	/**
+	 * Target grid power in W (source-state convention: >0 = deliberate grid draw,
+	 * <0 = deliberate feed-in). 0 = classic zero feed-in.
+	 */
+	targetW: number;
 	/** Proportional gain: fraction of the grid deviation corrected per step. */
 	gain: number;
 	/** Grid dead band in W — deviations below it are not corrected. */
 	deadBandW: number;
+	/** Maximum movement of the total setpoint per correction step in W; 0 = unlimited. */
+	maxStepW: number;
 	/** Minimum time between two write cycles in ms. */
 	minIntervalMs: number;
 	/** Minimum change of a head's setpoint before it is re-written (anti-chatter). */
@@ -169,8 +176,10 @@ export class MultiHeadController {
 		if (now - this.lastWriteTime < this.cfg.minIntervalMs) {
 			return;
 		}
-		if (Math.abs(gridPower) < this.cfg.deadBandW) {
-			return; // grid close enough to zero — nothing to correct
+		// Regulate towards the configured target grid power (0 = zero feed-in).
+		const error = gridPower - this.cfg.targetW;
+		if (Math.abs(error) < this.cfg.deadBandW) {
+			return; // grid close enough to the target — nothing to correct
 		}
 		const heads = this.hooks.getHeads().filter(h => h.online);
 		if (!heads.length) {
@@ -179,13 +188,20 @@ export class MultiHeadController {
 		// Feed-forward base: the GS we last commanded each head. Because every head
 		// executes its GS (its grid power tracks GS), this equals the current grid
 		// power without an extra read — and unlike a stale poll snapshot it lets the
-		// loop integrate to zero grid power instead of leaving a steady-state error.
+		// loop integrate to the target grid power instead of leaving a steady-state error.
 		const base = heads.reduce(
 			(acc, h) => acc + (this.lastGs.get(h.index) ?? (Number.isFinite(h.gp) ? h.gp : 0)),
 			0,
 		);
 		const sumMax = heads.reduce((acc, h) => acc + Math.abs(h.maxPower), 0);
-		const totalTarget = computeTotalTarget(base, gridPower, this.cfg.gain, sumMax);
+		let totalTarget = computeTotalTarget(base, error, this.cfg.gain, sumMax);
+		// Step limit: cap the movement per correction so a meter spike cannot slam
+		// the setpoint even with a high gain (manufacturer blueprint does the same).
+		if (this.cfg.maxStepW > 0) {
+			const lo = Math.max(base - this.cfg.maxStepW, -sumMax);
+			const hi = Math.min(base + this.cfg.maxStepW, sumMax);
+			totalTarget = Math.round(Math.max(lo, Math.min(hi, totalTarget)));
+		}
 		const setpoints = splitTarget(totalTarget, heads);
 
 		this.writeInProgress = true;

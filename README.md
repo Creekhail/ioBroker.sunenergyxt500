@@ -71,6 +71,8 @@ In both control modes the adapter **owns `MM`**: on every poll it checks each he
 
 *Adapter controller* (Mode B) — fields:
 * **Grid-power source state** — a foreign state holding your house meter's grid power. Convention: `>0` = grid draw, `<0` = feed-in. Enable **Invert source sign** if your meter uses the opposite convention.
+* **Target grid power** (W, default 0): 0 = zero feed-in; positive values keep a small deliberate grid draw (never feed in), negative values a small deliberate feed-in — same sign convention as the source state (`>0` = draw).
+* **Max. adjustment per correction** (W, default 500, 0 = unlimited): caps how far the setpoint moves per control step, so a high gain cannot overshoot on meter spikes.
 * **Gain** (default 0.3), **Dead band** (W), **Min. write interval** (ms), **Per-head write dead band** (W — minimum change of a head's setpoint before it is re-written, to avoid chatter as the split shifts). Each head's maximum power is **detected automatically** from the device (800 W for a 500, 2400 W for a 500 PRO), so mixed setups work without extra configuration.
 * **Watchdog warn / failsafe (s)** — if the grid source goes stale, the controller logs a warning and finally forces `GS=0` on **all heads** (safe neutral) until the source recovers. Watchdog telemetry is exposed under `controller.*`.
 
@@ -88,16 +90,18 @@ The adapter binds the meter (`MM=1` + `MD`) and the device regulates itself; the
 
 **What to expect:** The controller keeps the grid power inside a band of typically **±10–20 W around zero** and corrects load steps — depending on the settings — within **~1–3 seconds up to ~30 seconds**. A permanent, exact 0.0 W is **not achievable by design** — with any controller on this hardware:
 
-* **10 W steps:** The device applies the grid setpoint `GS` only in steps of 10 W — no software can regulate finer than that.
+* **Meter accuracy and noise:** the external meter itself measures with a tolerance and noise of a few watts — regulating below that is meaningless. (The `GS` setpoint has 1 W resolution, so the setpoint granularity is not the limit.)
 * **Measurement-chain latency:** meter measures → ioBroker state → controller → `/write` → device ramps. Between a load step and its correction, ~1–3 seconds pass unavoidably.
 * **Load dynamics:** A compressor or kettle switches in milliseconds — every controller reacts afterwards. Short power spikes in your charts are normal and energetically meaningless (watt-seconds).
-* The controller targets 0 and therefore oscillates **symmetrically** around zero — short, small feed-in moments are part of that.
+* The controller regulates towards the configured **target grid power** (default 0) and oscillates **symmetrically** around it — short, small feed-in moments are part of zero feed-in. If you must never feed in, set the target to a small deliberate draw (e.g. +10 W).
 
 **How the settings act:**
 
 | Setting | Effect | smaller value | larger value |
 |---|---|---|---|
 | **Gain** | fraction of the deviation corrected per step | sluggish, smooth (0.3 ≈ 7 steps to ~0) | fast (1.0 = one correction), but reacts harder to meter noise; >1 can overshoot |
+| **Target grid power (W)** | the value the grid power is regulated to | <0 = deliberate feed-in | >0 = deliberate draw ("never feed in") |
+| **Max. adjustment per correction (W)** | caps the setpoint movement per step | tames meter spikes at high gain | larger (or 0 = unlimited) reacts faster to huge load steps |
 | **Dead band (W)** | deviations below it are ignored | more precise, more writes (0 = correct everything) | calmer, leaves a small permanent deviation |
 | **Min. write interval** | cadence of corrections | faster settling (floor 1000 ms) | fewer device writes, slower tracking |
 | **Per-head write dead band** | suppresses mini-redistributions between heads (multi-head) | more precise | less chatter |
@@ -108,7 +112,7 @@ The adapter binds the meter (`MM=1` + `MD`) and the device regulates itself; the
 
 * `GP` (grid power): `>0` = feed-in, `<0` = draw — **opposite to a Shelly meter** (`api.GP ≈ −shelly.gridPower`).
 * `BP` (battery power): `>0` = charging, `<0` = discharging.
-* `GS` (grid setpoint): `>0` = feed-in/discharge, `<0` = grid charging (±2400 W on the Pro, 10 W steps).
+* `GS` (grid setpoint): `>0` = feed-in/discharge, `<0` = grid charging (±2400 W on the Pro, 1 W resolution).
 
 ## Object tree
 
@@ -176,7 +180,7 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 * **`info.connection` stays `false` / no data:** first make sure **local mode (`LM=1`)** is enabled on the device — without it the local API returns no values. Then verify that `http://<device-ip>/read` is reachable from the ioBroker host (test with a browser or `curl`). Per head, `heads.<n>.info.online` and `heads.<n>.info.lastError` show which one fails.
 * **Nothing is being controlled:** check the **Control mode** — *Off* never writes. In *Adapter controller* set a valid **grid-power source state**; in *Device self-regulation* set a supported **meter type** and **SN/IP**.
 * **Device ignores `GS` / battery does not react:** a head only executes a written `GS` when `MM=0`. In *Adapter controller* mode the adapter enforces this; if you write `GS` manually, make sure no meter is bound (`MM=0`). With a meter bound (`MM=1`) the device self-regulates and ignores `GS`.
-* **The controller is too slow / never reaches exactly 0:** see *Control behaviour, accuracy and limits* — the device steps `GS` in 10 W increments and the measurement chain adds ~1–3 s of latency, so a ±10–20 W band around zero is the physical optimum. For the fastest response use the *Precise* profile (gain 0.8–1.0, dead band 0, min. write interval 1000 ms).
+* **The controller is too slow / never reaches exactly 0:** see *Control behaviour, accuracy and limits* — the measurement chain adds ~1–3 s of latency and the meter itself has finite accuracy, so a band of ±10–20 W around the target is the physical optimum. For the fastest response use the *Precise* profile (gain 0.8–1.0, dead band 0, min. write interval 1000 ms); to never feed in, set the **target grid power** to a small positive draw.
 * **Two controllers fight over the battery:** run only one. The adapter enforces `MM` for the selected mode — disable any external `GS` script (or a device's own `MM` with a different meter) before using a control mode.
 * **Some states stay empty (`0` / `""`):** a device only returns the fields its firmware/topology actually provides (e.g. extra packs `SC2`–`SC5`, or fault bitmasks only during a fault). The complete raw response is always available in `heads.<n>.info.rawResponse`.
 * **After updating from a single-head version the tree looks wrong:** the object tree was restructured to `heads.<n>.*` in 0.2.0. The adapter removes obsolete objects automatically on start; if anything lingers, delete the old objects (or re-add the instance).
@@ -186,6 +190,10 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+
+### 0.2.6 (2026-07-04)
+* (Creekhail) Controller: new **target grid power** (deliberate small draw or feed-in — e.g. +10 W to never feed in; the manufacturer's HA blueprint offers the same option) and a **maximum adjustment per correction** step (default 500 W) that allows a high gain without overshoot on meter spikes.
+* (Creekhail) Documentation: corrected the setpoint-granularity statement — the device accepts `GS` with 1 W resolution (previously documented as 10 W steps); the practical accuracy limits are measurement-chain latency and meter noise.
 
 ### 0.2.5 (2026-07-02)
 * (Creekhail) Review follow-up: added the manufacturer/product link to the README, and the controller now only accepts acknowledged grid-power values (`ack=true`) from the configured meter state (a manually written test value can no longer drive the battery).

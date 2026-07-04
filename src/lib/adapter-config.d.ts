@@ -21,8 +21,12 @@ declare global {
 			// Mode B — self-consumption controller (one loop, split across heads)
 			gridPowerStateId: string;
 			gridPowerInverted: boolean;
+			// Target grid power in W (>0 = deliberate draw, <0 = deliberate feed-in; 0 = zero feed-in).
+			controllerTargetW: number;
 			controllerGain: number;
 			controllerDeadBandW: number;
+			// Maximum movement of the total setpoint per correction step (0 = unlimited).
+			controllerMaxStepW: number;
 			controllerMinIntervalMs: number;
 			// Minimum change of a head's setpoint before it is re-written (anti-chatter).
 			controllerWriteDeadBandW: number;

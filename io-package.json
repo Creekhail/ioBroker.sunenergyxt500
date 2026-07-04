@@ -1,8 +1,21 @@
 {
 	"common": {
 		"name": "sunenergyxt500",
-		"version": "0.2.5",
+		"version": "0.2.6",
 		"news": {
+			"0.2.6": {
+				"en": "Controller: configurable target grid power (e.g. +10 W deliberate draw to never feed in) and a maximum adjustment per correction step (allows a high gain without overshoot). Documentation: the GS setpoint has 1 W resolution (not 10 W as previously documented).",
+				"de": "Regler: einstellbare Ziel-Netzleistung (z. B. +10 W bewusster Bezug, um nie einzuspeisen) und eine maximale Änderung pro Korrekturschritt (erlaubt hohe Verstärkung ohne Überschwingen). Doku: der GS-Sollwert hat 1-W-Auflösung (nicht 10 W wie zuvor dokumentiert).",
+				"ru": "Контроллер: настраиваемая целевая мощность сети (например, намеренное потребление +10 Вт, чтобы никогда не подавать) и максимальная регулировка на шаг коррекции (обеспечивает высокий коэффициент усиления без перерегулирования). Документация: уставка GS имеет разрешение 1 Вт (а не 10 Вт, как описано ранее).",
+				"pt": "Controlador: potência de rede alvo configurável (por exemplo, consumo deliberado de +10 W para nunca alimentar) e um ajuste máximo por etapa de correção (permite um alto ganho sem overshoot). Documentação: o ponto de ajuste GS tem resolução de 1 W (não 10 W conforme documentado anteriormente).",
+				"nl": "Controller: configureerbaar doelnetvermogen (bijv. +10 W bewuste afname om nooit terug te leveren) en een maximale aanpassing per correctiestap (maakt een hoge winst mogelijk zonder overshoot). Documentatie: het GS-instelpunt heeft een resolutie van 1 W (niet 10 W zoals eerder gedocumenteerd).",
+				"fr": "Contrôleur : puissance du réseau cible configurable (par exemple, consommation délibérée de +10 W pour ne jamais alimenter) et réglage maximum par étape de correction (permet un gain élevé sans dépassement). Documentation : le point de consigne GS a une résolution de 1 W (et non de 10 W comme documenté précédemment).",
+				"it": "Controller: potenza di rete target configurabile (ad esempio +10 W di assorbimento deliberato per non immettere mai) e una regolazione massima per fase di correzione (consente un guadagno elevato senza superamento). Documentazione: il setpoint GS ha una risoluzione di 1 W (non 10 W come precedentemente documentato).",
+				"es": "Controlador: potencia de red objetivo configurable (por ejemplo, +10 W de consumo deliberado para no inyectar nunca) y un ajuste máximo por paso de corrección (permite una alta ganancia sin sobrepasar). Documentación: el punto de ajuste GS tiene una resolución de 1 W (no 10 W como se documentó anteriormente).",
+				"pl": "Kontroler: konfigurowalna docelowa moc sieci (np. celowe pobieranie +10 W, aby nigdy nie wprowadzać zasilania) i maksymalna regulacja na krok korekcji (umożliwia wysokie wzmocnienie bez przeregulowania). Dokumentacja: wartość zadana GS ma rozdzielczość 1 W (a nie 10 W, jak udokumentowano wcześniej).",
+				"uk": "Контролер: настроювана цільова потужність мережі (наприклад, +10 Вт навмисне споживання, щоб ніколи не подаватись) і максимальне коригування на крок корекції (дозволяє високе посилення без перерегулювання). Документація: задане значення GS має роздільну здатність 1 Вт (а не 10 Вт, як було задокументовано раніше).",
+				"zh-cn": "控制器：可配置的目标电网功率（例如，+10 W 故意抽取，从不馈入）和每个校正步骤的最大调整（允许高增益而不会过冲）。文档：GS 设定点具有 1 W 分辨率（而不是之前记录的 10 W）。"
+			},
 			"0.2.5": {
 				"en": "Review follow-up: manufacturer/product link in the README and the controller now only accepts acknowledged grid-power values (ack=true) from the meter state.",
 				"de": "Review-Nacharbeit: Hersteller-/Produktlink im README, und der Regler akzeptiert nur noch bestätigte Netzleistungswerte (ack=true) vom Zähler-State.",
@@ -67,19 +80,6 @@
 				"pl": "Solidność kontrolera: przestrzegane są wartości konfiguracyjne 0 (wzmocnienie/martwe pasma), izolacja zapisu na każdą głowicę, zabezpieczenie przed windupem, gdy urządzenie ogranicza wewnętrznie, GS jest neutralizowane do 0, gdy kontroler się zatrzymuje. Głowice są odpytywane równolegle, czyszczenie przy uruchomieniu dotyczy tylko obiektów zarządzanych przez adapter, a ręczne zapisy GS są odrzucane, gdy kontroler jest aktywny.",
 				"uk": "Надійність контролера: дотримуються значення конфігурації 0 (зони підсилення/мертвої зони), ізоляція запису на головку, захист від перемотування, коли пристрій обмежує внутрішні, GS нейтралізується до 0, коли контролер зупиняється. Головки опитуються паралельно, очищення при запуску торкається лише об’єктів, керованих адаптером, а ручні записи GS відхиляються, поки контролер активний.",
 				"zh-cn": "控制器稳健性：遵循 0 的配置值（增益/死区）、每个磁头写入隔离、设备内部限制时的抗饱和、控制器停止时 GS 中和为 0。磁头并行轮询，启动清理仅涉及适配器管理的对象，并且在控制器处于活动状态时拒绝手动 GS 写入。"
-			},
-			"0.2.0": {
-				"en": "Multi-head support: manage up to three SunEnergyXT heads in one instance; the controller splits the grid setpoint across all heads. New per-head object tree (heads.N.*) and combined totals (total.*), plus a connection test button. Device self-regulation stays single-head only. Note: the object tree was restructured — re-create existing single-head instances.",
-				"de": "Mehrkopf-Unterstützung: bis zu drei SunEnergyXT-Köpfe in einer Instanz; der Regler verteilt den Netz-Sollwert auf alle Köpfe. Neuer Objektbaum pro Kopf (heads.N.*) und Summen (total.*), plus Verbindungs-Testknopf. Geräte-Eigenregelung nur mit einem Kopf. Hinweis: Objektbaum umstrukturiert — bestehende Einzelkopf-Instanzen neu anlegen.",
-				"ru": "Поддержка нескольких головок: управление до трех головок SunEnergyXT в одном экземпляре; контроллер распределяет заданное значение сети по всем головкам. Новое дерево объектов по головам (heads.N.*) и объединенные итоги (total.*), а также кнопка проверки соединения. Саморегулирование устройства остается только с одной головкой. Примечание: дерево объектов было реструктурировано — заново создайте существующие экземпляры с одной головкой.",
-				"pt": "Suporte para vários cabeçotes: gerencie até três cabeçotes SunEnergyXT em uma instância; o controlador divide o ponto de ajuste da rede em todos os cabeçotes. Nova árvore de objetos por cabeça (heads.N.*) e totais combinados (total.*), além de um botão de teste de conexão. A autorregulação do dispositivo permanece apenas com um único cabeçote. Nota: a árvore de objetos foi reestruturada — recriar instâncias single-head existentes.",
-				"nl": "Ondersteuning voor meerdere koppen: beheer maximaal drie SunEnergyXT-koppen in één keer; de controller verdeelt het netinstelpunt over alle koppen. Nieuwe objectboom per hoofd (heads.N.*) en gecombineerde totalen (total.*), plus een verbindingstestknop. Zelfregulering van het apparaat blijft alleen op één kop. Opmerking: de objectboom is geherstructureerd - maak bestaande exemplaren met één kop opnieuw.",
-				"fr": "Prise en charge de plusieurs têtes : gérez jusqu'à trois têtes SunEnergyXT en une seule instance ; le contrôleur répartit le point de consigne du réseau entre toutes les têtes. Nouvelle arborescence d'objets par tête (heads.N.*) et totaux combinés (total.*), plus un bouton de test de connexion. L'autorégulation de l'appareil reste à tête unique. Remarque : l'arborescence des objets a été restructurée : recréez les instances à tête unique existantes.",
-				"it": "Supporto multi-testa: gestisci fino a tre teste SunEnergyXT in un'unica istanza; il controller suddivide il setpoint di rete su tutte le teste. Nuovo albero degli oggetti per testa (teste.N.*) e totali combinati (totale.*), più un pulsante per il test della connessione. L'autoregolazione del dispositivo rimane solo monotesta. Nota: l'albero degli oggetti è stato ristrutturato: ricrea le istanze a testa singola esistenti.",
-				"es": "Soporte para múltiples cabezales: administre hasta tres cabezales SunEnergyXT en una sola instancia; el controlador divide el punto de ajuste de la red entre todos los cabezales. Nuevo árbol de objetos por cabeza (cabezas.N.*) y totales combinados (total.*), además de un botón de prueba de conexión. La autorregulación del dispositivo se mantiene en un solo cabezal. Nota: el árbol de objetos se reestructuró: vuelva a crear instancias de un solo cabezal existentes.",
-				"pl": "Obsługa wielu głowic: zarządzanie maksymalnie trzema głowicami SunEnergyXT w jednej instancji; sterownik dzieli wartość zadaną sieci na wszystkie głowice. Nowe drzewo obiektów na głowę (szt.N.*) i łączne sumy (ogółem.*), a także przycisk testu połączenia. Samoregulacja urządzenia pozostaje tylko w przypadku jednej głowicy. Uwaga: drzewo obiektów zostało przebudowane — odtwórz istniejące instancje jednogłowicowe.",
-				"uk": "Підтримка кількох головок: керуйте до трьох головок SunEnergyXT в одному екземплярі; контролер розподіляє задане значення мережі між усіма головками. Нове дерево об’єктів для кожної голови (heads.N.*) і комбіновані підсумки (total.*), а також кнопка перевірки підключення. Саморегуляція пристрою залишається тільки в одній головці. Примітка: дерево об’єктів було реструктуровано — повторно створіть існуючі одноголові екземпляри.",
-				"zh-cn": "多头支持：在一个实例中最多管理三个SunEnergyXT头；控制器将网格设定值分配给所有头。新的每个头对象树 (heads.N.*) 和组合总数 (total.*)，以及一个连接测试按钮。设备自我调节仅保持单头。注意：对象树已重组 - 重新创建现有的单头实例。"
 			}
 		},
 		"titleLang": {
@@ -163,8 +163,10 @@
 		"controlMode": "off",
 		"gridPowerStateId": "",
 		"gridPowerInverted": false,
+		"controllerTargetW": 0,
 		"controllerGain": 0.3,
 		"controllerDeadBandW": 20,
+		"controllerMaxStepW": 500,
 		"controllerMinIntervalMs": 5000,
 		"controllerWriteDeadBandW": 10,
 		"watchdogWarnSec": 30,
