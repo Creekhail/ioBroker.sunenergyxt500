@@ -84,6 +84,26 @@ The adapter binds the meter (`MM=1` + `MD`) and the device regulates itself; the
 
 > **Safety:** In *Off* mode the adapter is read-only — it only polls `/read` and never writes unless you command a `control.*` state. In a control mode the adapter **enforces `MM`** on every head for that mode and re-asserts it if changed externally; do **not** run a second `GS` writer at the same time (your own script, or a device's `MM` with a different meter), otherwise they fight over the battery.
 
+## Control behaviour, accuracy and limits
+
+**What to expect:** The controller keeps the grid power inside a band of typically **±10–20 W around zero** and corrects load steps — depending on the settings — within **~1–3 seconds up to ~30 seconds**. A permanent, exact 0.0 W is **not achievable by design** — with any controller on this hardware:
+
+* **10 W steps:** The device applies the grid setpoint `GS` only in steps of 10 W — no software can regulate finer than that.
+* **Measurement-chain latency:** meter measures → ioBroker state → controller → `/write` → device ramps. Between a load step and its correction, ~1–3 seconds pass unavoidably.
+* **Load dynamics:** A compressor or kettle switches in milliseconds — every controller reacts afterwards. Short power spikes in your charts are normal and energetically meaningless (watt-seconds).
+* The controller targets 0 and therefore oscillates **symmetrically** around zero — short, small feed-in moments are part of that.
+
+**How the settings act:**
+
+| Setting | Effect | smaller value | larger value |
+|---|---|---|---|
+| **Gain** | fraction of the deviation corrected per step | sluggish, smooth (0.3 ≈ 7 steps to ~0) | fast (1.0 = one correction), but reacts harder to meter noise; >1 can overshoot |
+| **Dead band (W)** | deviations below it are ignored | more precise, more writes (0 = correct everything) | calmer, leaves a small permanent deviation |
+| **Min. write interval** | cadence of corrections | faster settling (floor 1000 ms) | fewer device writes, slower tracking |
+| **Per-head write dead band** | suppresses mini-redistributions between heads (multi-head) | more precise | less chatter |
+
+**Two proven profiles:** *Relaxed* (the defaults — calm, minimal device writes, ±20–30 W band) and *Precise* (gain 0.8–1.0 · dead band 0 · interval 1000 ms · write dead band 0 — ±10–20 W band, settling in 1–3 s). Over a day both end up with practically the same energy balance — the difference is chart cosmetics, not money.
+
 ## Sign conventions
 
 * `GP` (grid power): `>0` = feed-in, `<0` = draw — **opposite to a Shelly meter** (`api.GP ≈ −shelly.gridPower`).
@@ -156,6 +176,7 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 * **`info.connection` stays `false` / no data:** first make sure **local mode (`LM=1`)** is enabled on the device — without it the local API returns no values. Then verify that `http://<device-ip>/read` is reachable from the ioBroker host (test with a browser or `curl`). Per head, `heads.<n>.info.online` and `heads.<n>.info.lastError` show which one fails.
 * **Nothing is being controlled:** check the **Control mode** — *Off* never writes. In *Adapter controller* set a valid **grid-power source state**; in *Device self-regulation* set a supported **meter type** and **SN/IP**.
 * **Device ignores `GS` / battery does not react:** a head only executes a written `GS` when `MM=0`. In *Adapter controller* mode the adapter enforces this; if you write `GS` manually, make sure no meter is bound (`MM=0`). With a meter bound (`MM=1`) the device self-regulates and ignores `GS`.
+* **The controller is too slow / never reaches exactly 0:** see *Control behaviour, accuracy and limits* — the device steps `GS` in 10 W increments and the measurement chain adds ~1–3 s of latency, so a ±10–20 W band around zero is the physical optimum. For the fastest response use the *Precise* profile (gain 0.8–1.0, dead band 0, min. write interval 1000 ms).
 * **Two controllers fight over the battery:** run only one. The adapter enforces `MM` for the selected mode — disable any external `GS` script (or a device's own `MM` with a different meter) before using a control mode.
 * **Some states stay empty (`0` / `""`):** a device only returns the fields its firmware/topology actually provides (e.g. extra packs `SC2`–`SC5`, or fault bitmasks only during a fault). The complete raw response is always available in `heads.<n>.info.rawResponse`.
 * **After updating from a single-head version the tree looks wrong:** the object tree was restructured to `heads.<n>.*` in 0.2.0. The adapter removes obsolete objects automatically on start; if anything lingers, delete the old objects (or re-add the instance).

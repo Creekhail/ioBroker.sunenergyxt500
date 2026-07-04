@@ -84,6 +84,26 @@ Der Adapter bindet den Zähler (`MM=1` + `MD`) und das Gerät regelt selbst; der
 
 > **Sicherheit:** Im *Aus*-Modus ist der Adapter read-only — er pollt nur `/read` und schreibt nichts, außer du befiehlst einen `control.*`-State. In einem Steuermodus **erzwingt** der Adapter das passende `MM` auf jedem Kopf und setzt es bei externer Änderung wieder; lass **nicht** gleichzeitig einen zweiten `GS`-Schreiber laufen (dein eigenes Skript oder den geräteeigenen `MM`-Modus mit einem anderen Zähler), sonst kämpfen sie um den Akku.
 
+## Regelverhalten, Genauigkeit und Grenzen
+
+**Was du erwarten kannst:** Der Regler hält die Netzleistung in einem Band von typisch **±10–20 W um den Nullpunkt** und regelt Lastsprünge — je nach Einstellungen — innerhalb von **~1–3 Sekunden bis ~30 Sekunden** aus. Eine dauerhafte, exakte 0,0 W ist **prinzipbedingt nicht erreichbar** — mit keiner Regelung auf dieser Hardware:
+
+* **10-W-Schritte:** Das Gerät stellt den Netz-Sollwert `GS` nur in Schritten von 10 W — feiner kann keine Software regeln.
+* **Messketten-Latenz:** Zähler misst → ioBroker-State → Regler → `/write` → Gerät rampt. Zwischen Lastsprung und Korrektur vergehen unvermeidbar ~1–3 Sekunden.
+* **Lastdynamik:** Ein Kompressor oder Wasserkocher springt in Millisekunden an — jede Regelung reagiert danach. Kurze Leistungsspitzen im Diagramm sind normal und energetisch bedeutungslos (Wattsekunden).
+* Der Regler zielt auf 0 und pendelt daher **symmetrisch** um die Null — kurze, kleine Einspeise-Momente gehören dazu.
+
+**Wie die Einstellungen wirken:**
+
+| Einstellung | Wirkung | kleiner Wert | größerer Wert |
+|---|---|---|---|
+| **Verstärkung** | Anteil der Abweichung, der pro Schritt korrigiert wird | träge, glatt (0,3 ≈ 7 Schritte bis ~0) | schnell (1,0 = eine Korrektur), reagiert aber härter auf Messrauschen; >1 kann überschwingen |
+| **Totband (W)** | Abweichungen darunter werden ignoriert | präziser, mehr Schreibvorgänge (0 = alles korrigieren) | ruhiger, lässt kleine Dauerabweichung stehen |
+| **Min. Schreibintervall** | Takt der Korrekturen | schnelleres Ausregeln (Untergrenze 1000 ms) | weniger Gerätezugriffe, langsameres Nachführen |
+| **Per-Kopf-Schreib-Totband** | unterdrückt Mini-Umverteilungen zwischen Köpfen (Mehrkopf) | präziser | weniger Zappeln |
+
+**Zwei erprobte Profile:** *Gelassen* (Standardwerte — ruhig, minimale Gerätezugriffe, Band ±20–30 W) und *Präzise* (Verstärkung 0,8–1,0 · Totband 0 · Intervall 1000 ms · Schreib-Totband 0 — Band ±10–20 W, Ausregeln in 1–3 s). Beide erreichen über den Tag praktisch dieselbe Energiebilanz — der Unterschied ist Optik im Diagramm, nicht Geld.
+
 ## Vorzeichenkonventionen
 
 * `GP` (Netzleistung): `>0` = Einspeisung, `<0` = Bezug — **entgegengesetzt zu einem Shelly-Zähler** (`api.GP ≈ −shelly.gridPower`).
@@ -156,6 +176,7 @@ Die Roh-Felder bleiben für Experten-/Handbetrieb schreibbar (z. B. im *Aus*-Mod
 * **`info.connection` bleibt `false` / keine Daten:** stelle zuerst sicher, dass der **lokale Modus (`LM=1`)** am Gerät aktiviert ist — ohne ihn liefert die lokale API keine Werte. Prüfe dann, ob `http://<geräte-ip>/read` vom ioBroker-Host erreichbar ist (mit Browser oder `curl` testen). Pro Kopf zeigen `heads.<n>.info.online` und `heads.<n>.info.lastError`, welcher ausfällt.
 * **Es wird nichts gesteuert:** prüfe den **Steuermodus** — *Aus* schreibt nie. Im *Adapter-Regler* einen gültigen **Quell-State Netzleistung** setzen; in *Geräte-Eigenregelung* einen unterstützten **Zählertyp** und **SN/IP**.
 * **Gerät ignoriert `GS` / Akku reagiert nicht:** ein Kopf führt ein geschriebenes `GS` nur bei `MM=0` aus. Im *Adapter-Regler*-Modus erzwingt der Adapter das; wenn du `GS` manuell schreibst, stelle sicher, dass kein Zähler gebunden ist (`MM=0`). Mit gebundenem Zähler (`MM=1`) regelt das Gerät selbst und ignoriert `GS`.
+* **Der Regler ist zu langsam / erreicht nie exakt 0:** siehe *Regelverhalten, Genauigkeit und Grenzen* — das Gerät stellt `GS` in 10-W-Schritten und die Messkette bringt ~1–3 s Latenz mit, ein Band von ±10–20 W um die Null ist das physikalische Optimum. Für die schnellste Reaktion das *Präzise*-Profil nutzen (Verstärkung 0,8–1,0, Totband 0, min. Schreibintervall 1000 ms).
 * **Zwei Regler kämpfen um den Akku:** nur einen laufen lassen. Der Adapter erzwingt `MM` für den gewählten Modus — deaktiviere ein externes `GS`-Skript (oder den geräteeigenen `MM` mit anderem Zähler), bevor du einen Steuermodus nutzt.
 * **Manche States bleiben leer (`0` / `""`):** ein Gerät liefert nur die Felder, die seine Firmware/Topologie tatsächlich bereitstellt (z. B. weitere Packs `SC2`–`SC5` oder Fehler-Bitmasks nur im Fehlerfall). Die komplette Rohantwort steht immer in `heads.<n>.info.rawResponse`.
 * **Nach dem Update von einer Einzelkopf-Version sieht der Baum falsch aus:** der Objektbaum wurde in 0.2.0 auf `heads.<n>.*` umgestellt. Der Adapter entfernt veraltete Objekte beim Start automatisch; bleibt doch etwas übrig, die alten Objekte löschen (oder die Instanz neu anlegen).
