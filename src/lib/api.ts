@@ -22,11 +22,22 @@ const MAX_RESPONSE_BYTES = 512 * 1024;
 
 /** Result of a /read: the decoded reported state plus the original response body. */
 export interface DeviceRead {
+	/** The decoded `state.reported` snapshot. */
 	reported: ReportedState;
 	/** The raw, unmodified /read response body as returned by the device. */
 	body: string;
 }
 
+/** Envelope structure of a /read response. */
+type ReadEnvelope = {
+	/** Device-shadow container. */
+	state?: {
+		/** The reported snapshot inside the shadow. */
+		reported?: ReportedState;
+	};
+};
+
+/** Minimal HTTP client for one head's local API (/read and /write). */
 export class SunEnergyXtApi {
 	private readonly baseUrl: string;
 
@@ -45,11 +56,7 @@ export class SunEnergyXtApi {
 	/** Reads the current device snapshot (decoded `state.reported`) plus the original body. */
 	public async read(): Promise<DeviceRead> {
 		const body = await this.request('GET', '/read');
-		const parsed = JSON.parse(body) as {
-			state?: {
-				reported?: ReportedState;
-			};
-		};
+		const parsed = JSON.parse(body) as ReadEnvelope;
 		const reported = parsed?.state?.reported;
 		if (reported && typeof reported === 'object') {
 			return { reported, body };

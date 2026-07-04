@@ -12,19 +12,25 @@ import type { ReportedState } from './api';
 
 /** Bilingual object name (English + German), used as ioBroker common.name. */
 export interface LocalizedName {
+	/** English name (also the key for the generated machine translations). */
 	en: string;
+	/** German name (hand-written). */
 	de: string;
 }
 
+/** Definition of one device field mapped to an ioBroker state. */
 export interface StateDef {
 	/** Relative object id within the adapter namespace */
 	id: string;
 	/** API field name in /read (state.reported) */
 	field: string;
+	/** ioBroker common.role. */
 	role: string;
+	/** ioBroker common.type. */
 	type: ioBroker.CommonType;
 	/** Bilingual display name */
 	name: LocalizedName;
+	/** ioBroker common.unit. */
 	unit?: string;
 	/** Number of decimals to keep for numeric values (default 0) */
 	decimals?: number;
@@ -734,7 +740,9 @@ export function applyMeterModeCoupling(
 /** Meter types the storage can read on its own (Mode A / device self-regulation). */
 export type MeterType = 'ecotracker' | 'shelly3em' | 'shellypro3em' | 'tasmota';
 
+/** User-facing meter configuration used to build the device's MD binding JSON. */
 export interface MeterConfig {
+	/** One of the four meter types supported by the storage firmware. */
 	type: MeterType;
 	/** Meter SN (mDNS types) or LAN IP (EcoTracker, direct mode). */
 	id: string;
@@ -849,9 +857,9 @@ export function buildMeterMd(cfg: MeterConfig): string {
  * Scales and rounds a value to the given number of decimals; returns null for
  * non-finite/empty input.
  *
- * @param value
- * @param decimals
- * @param scale - factor applied before rounding (default 1)
+ * @param value raw value as delivered by the device (number or numeric string)
+ * @param decimals number of decimals to keep (default 0)
+ * @param scale factor applied before rounding (default 1)
  */
 export function roundTo(value: unknown, decimals = 0, scale = 1): number | null {
 	if (value == null || value === '') {

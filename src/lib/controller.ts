@@ -27,14 +27,21 @@ import type { HeadState } from './split';
 import { computeTotalTarget, splitTarget } from './split';
 import type { LocalizedName } from './states';
 
+/** Tuning parameters of the self-consumption controller. */
 export interface ControllerConfig {
+	/** Proportional gain: fraction of the grid deviation corrected per step. */
 	gain: number;
+	/** Grid dead band in W — deviations below it are not corrected. */
 	deadBandW: number;
+	/** Minimum time between two write cycles in ms. */
 	minIntervalMs: number;
 	/** Minimum change of a head's setpoint before it is re-written (anti-chatter). */
 	writeDeadBandW: number;
+	/** Invert the sign of the grid-power source (meters using >0 = feed-in). */
 	inverted: boolean;
+	/** Watchdog: log a warning after this many seconds without a source update. */
 	warnSec: number;
+	/** Watchdog: force GS=0 after this many seconds without a source update. */
 	failsafeSec: number;
 }
 
@@ -88,6 +95,7 @@ const WATCHDOG_INTERVAL_MS = 15000;
 const SYNC_DEVIATION_W = 150;
 const SYNC_MIN_AGE_MS = 10000;
 
+/** One self-consumption control loop steering the grid setpoint of 1–3 heads. */
 export class MultiHeadController {
 	private lastWriteTime = 0;
 	private readonly lastGs = new Map<number, number>();
@@ -98,6 +106,12 @@ export class MultiHeadController {
 	private maxGapSec = 0;
 	private watchdogTimer?: ioBroker.Interval;
 
+	/**
+	 * @param adapter the adapter instance (logging, states, timers)
+	 * @param hooks head snapshot and GS write callbacks provided by the adapter
+	 * @param gridStateId foreign state id of the grid-power source (watchdog checks its age)
+	 * @param cfg controller tuning parameters
+	 */
 	public constructor(
 		private readonly adapter: ioBroker.Adapter,
 		private readonly hooks: ControllerHooks,
@@ -113,6 +127,7 @@ export class MultiHeadController {
 		this.watchdogTimer = this.adapter.setInterval(() => void this.watchdogTick(), WATCHDOG_INTERVAL_MS);
 	}
 
+	/** Stops the watchdog; no further writes are issued by this instance. */
 	public stop(): void {
 		if (this.watchdogTimer) {
 			this.adapter.clearInterval(this.watchdogTimer);

@@ -364,7 +364,7 @@ class Sunenergyxt500 extends utils.Adapter {
 	/**
 	 * Ensures a channel object exists for every parent path of the given ids.
 	 *
-	 * @param ids
+	 * @param ids relative state ids whose ancestor channels must exist
 	 */
 	private async ensureChannels(ids: string[]): Promise<void> {
 		const parents = new Set<string>();
@@ -621,7 +621,7 @@ class Sunenergyxt500 extends utils.Adapter {
 	/**
 	 * Persists whether the adapter currently holds a meter binding (device mode).
 	 *
-	 * @param bound
+	 * @param bound true while the adapter-created binding is active on the device
 	 */
 	private async setMeterBoundByAdapter(bound: boolean): Promise<void> {
 		await this.setStateAsync('info.meterBound', { val: bound, ack: true });
@@ -899,7 +899,7 @@ function fallbackMaxPower(data: ReportedState): number {
 /**
  * Parses an unknown API value to a finite number, or undefined.
  *
- * @param value
+ * @param value raw value as delivered by the device
  */
 function num(value: unknown): number | undefined {
 	const n = Number(value);
@@ -909,7 +909,7 @@ function num(value: unknown): number | undefined {
 /**
  * Safely converts an unknown API value to a string (objects become JSON).
  *
- * @param value
+ * @param value raw value as delivered by the device
  */
 function asString(value: unknown): string {
 	if (value == null) {
