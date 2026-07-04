@@ -80,32 +80,6 @@
 				"pl": "Obsługa wielu głowic: zarządzanie maksymalnie trzema głowicami SunEnergyXT w jednej instancji; sterownik dzieli wartość zadaną sieci na wszystkie głowice. Nowe drzewo obiektów na głowę (szt.N.*) i łączne sumy (ogółem.*), a także przycisk testu połączenia. Samoregulacja urządzenia pozostaje tylko w przypadku jednej głowicy. Uwaga: drzewo obiektów zostało przebudowane — odtwórz istniejące instancje jednogłowicowe.",
 				"uk": "Підтримка кількох головок: керуйте до трьох головок SunEnergyXT в одному екземплярі; контролер розподіляє задане значення мережі між усіма головками. Нове дерево об’єктів для кожної голови (heads.N.*) і комбіновані підсумки (total.*), а також кнопка перевірки підключення. Саморегуляція пристрою залишається тільки в одній головці. Примітка: дерево об’єктів було реструктуровано — повторно створіть існуючі одноголові екземпляри.",
 				"zh-cn": "多头支持：在一个实例中最多管理三个SunEnergyXT头；控制器将网格设定值分配给所有头。新的每个头对象树 (heads.N.*) 和组合总数 (total.*)，以及一个连接测试按钮。设备自我调节仅保持单头。注意：对象树已重组 - 重新创建现有的单头实例。"
-			},
-			"0.1.1": {
-				"en": "Released via npm trusted publishing (provenance) and a package metadata fix.",
-				"de": "Veröffentlichung über npm Trusted Publishing (Provenance) und eine Paket-Metadaten-Korrektur.",
-				"ru": "Выпущено через доверенную публикацию npm (происхождение) и исправление метаданных пакета.",
-				"pt": "Lançado via publicação confiável npm (proveniência) e uma correção de metadados de pacote.",
-				"nl": "Uitgegeven via npm vertrouwde publicatie (herkomst) en een oplossing voor de metagegevens van het pakket.",
-				"fr": "Publié via la publication approuvée npm (provenance) et un correctif de métadonnées du package.",
-				"it": "Rilasciato tramite pubblicazione attendibile npm (provenienza) e una correzione dei metadati del pacchetto.",
-				"es": "Publicado a través de publicación confiable de npm (procedencia) y una corrección de metadatos del paquete.",
-				"pl": "Wydane za pośrednictwem zaufanego publikowania npm (pochodzenie) i poprawka metadanych pakietu.",
-				"uk": "Випущено через довірену публікацію npm (походження) і виправлено метадані пакета.",
-				"zh-cn": "通过 npm 可信发布（出处）和包元数据修复发布。"
-			},
-			"0.1.0": {
-				"en": "initial release",
-				"de": "Erstveröffentlichung",
-				"ru": "Начальная версия",
-				"pt": "lançamento inicial",
-				"nl": "Eerste uitgave",
-				"fr": "Première version",
-				"it": "Versione iniziale",
-				"es": "Versión inicial",
-				"pl": "Pierwsze wydanie",
-				"uk": "Початкова версія",
-				"zh-cn": "首次出版"
 			}
 		},
 		"titleLang": {

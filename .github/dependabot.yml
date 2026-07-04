@@ -3,8 +3,10 @@ updates:
   - package-ecosystem: npm
     directory: "/"
     schedule:
-      interval: monthly
-      time: "00:05"
+      # Random cron (monthly) instead of interval: monthly, per ioBroker suggestion
+      # S8906, to distribute load on the GitHub infrastructure.
+      interval: cron
+      cronjob: "23 4 11 * *"
       timezone: Europe/Berlin
     open-pull-requests-limit: 15
     assignees:
@@ -20,8 +22,8 @@ updates:
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: monthly
-      time: "00:05"
+      interval: cron
+      cronjob: "41 5 17 * *"
       timezone: Europe/Berlin
     open-pull-requests-limit: 15
     assignees:
