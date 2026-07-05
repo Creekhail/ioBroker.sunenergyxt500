@@ -105,6 +105,13 @@ interface HeadRuntime {
 	label: string;
 	api: SunEnergyXtApi;
 	online: boolean;
+	/**
+	 * Set after the first successful poll since adapter start. That first cycle
+	 * force-writes every delivered value (setState instead of setStateChanged) so
+	 * the initialization quality 0x20 is cleared and every delivered state carries
+	 * a timestamp at least as fresh as the adapter start.
+	 */
+	firstPollDone?: boolean;
 	/** Latest snapshot used for the aggregates and (later) the controller split. */
 	soc?: number;
 	bp?: number;
@@ -133,6 +140,8 @@ class Sunenergyxt500 extends utils.Adapter {
 	private readonly controlMap = new Map<string, StateDef>();
 	/** Last value confirmed (ack=true) per control state — avoids a DB read per field and poll. */
 	private readonly confirmedCache = new Map<string, string | number | boolean>();
+	/** Whether the aggregates were force-written once since start (clears quality 0x20). */
+	private aggregatesForced = false;
 
 	public constructor(options: Partial<utils.AdapterOptions> = {}) {
 		super({
@@ -450,6 +459,10 @@ class Sunenergyxt500 extends utils.Adapter {
 		const base = `heads.${h.index}`;
 		try {
 			const { reported: data, body } = await h.api.read();
+			// First successful cycle after start: force-write every delivered value so
+			// the creation quality 0x20 is cleared even when the value equals the
+			// object default (setStateChanged would skip it forever otherwise).
+			const force = !h.firstPollDone;
 			for (const def of ALL_DEFS) {
 				if (!def.derive && !(def.field in data)) {
 					continue;
@@ -469,12 +482,18 @@ class Sunenergyxt500 extends utils.Adapter {
 					continue;
 				}
 				const id = `${base}.${def.id}`;
-				if (def.write) {
+				if (force) {
+					await this.setStateAsync(id, { val: value, ack: true });
+					if (def.write) {
+						this.confirmedCache.set(id, value);
+					}
+				} else if (def.write) {
 					await this.confirmControlState(id, value);
 				} else {
 					await this.setStateChangedAsync(id, value, true);
 				}
 			}
+			h.firstPollDone = true;
 			await this.guardMeterMode(h, data);
 			await this.setStateChangedAsync(`${base}.info.rawResponse`, body, true);
 
@@ -512,27 +531,28 @@ class Sunenergyxt500 extends utils.Adapter {
 	/** Computes the combined view across all online heads. */
 	private async computeAggregates(): Promise<void> {
 		const online = this.heads.filter(h => h.online);
-		await this.setStateChangedAsync('total.onlineCount', online.length, true);
-		await this.setStateChangedAsync(
-			'total.gridPower',
-			Math.round(online.reduce((acc, h) => acc + (h.gp ?? 0), 0)),
-			true,
-		);
-		await this.setStateChangedAsync(
-			'total.batteryPower',
-			Math.round(online.reduce((acc, h) => acc + (h.bp ?? 0), 0)),
-			true,
-		);
-		await this.setStateChangedAsync(
-			'total.maxPower',
-			Math.round(online.reduce((acc, h) => acc + h.maxPower, 0)),
-			true,
-		);
+		// First cycle after start: force-write so the creation quality 0x20 clears
+		// even when an aggregate equals its object default (e.g. gridPower 0).
+		const force = !this.aggregatesForced && online.length > 0;
+		const write = async (id: string, val: number): Promise<void> => {
+			if (force) {
+				await this.setStateAsync(id, { val, ack: true });
+			} else {
+				await this.setStateChangedAsync(id, val, true);
+			}
+		};
+		await write('total.onlineCount', online.length);
+		await write('total.gridPower', Math.round(online.reduce((acc, h) => acc + (h.gp ?? 0), 0)));
+		await write('total.batteryPower', Math.round(online.reduce((acc, h) => acc + (h.bp ?? 0), 0)));
+		await write('total.maxPower', Math.round(online.reduce((acc, h) => acc + h.maxPower, 0)));
 		const withSoc = online.filter(h => h.soc !== undefined);
 		if (withSoc.length) {
 			const weight = withSoc.reduce((acc, h) => acc + h.packs, 0) || 1;
 			const soc = withSoc.reduce((acc, h) => acc + (h.soc as number) * h.packs, 0) / weight;
-			await this.setStateChangedAsync('total.soc', Math.round(soc * 10) / 10, true);
+			await write('total.soc', Math.round(soc * 10) / 10);
+		}
+		if (force) {
+			this.aggregatesForced = true;
 		}
 
 		const connected = online.length > 0;

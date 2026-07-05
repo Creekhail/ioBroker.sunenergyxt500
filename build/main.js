@@ -100,6 +100,8 @@ class Sunenergyxt500 extends utils.Adapter {
   controlMap = /* @__PURE__ */ new Map();
   /** Last value confirmed (ack=true) per control state — avoids a DB read per field and poll. */
   confirmedCache = /* @__PURE__ */ new Map();
+  /** Whether the aggregates were force-written once since start (clears quality 0x20). */
+  aggregatesForced = false;
   constructor(options = {}) {
     super({
       ...options,
@@ -380,6 +382,7 @@ class Sunenergyxt500 extends utils.Adapter {
     const base = `heads.${h.index}`;
     try {
       const { reported: data, body } = await h.api.read();
+      const force = !h.firstPollDone;
       for (const def of ALL_DEFS) {
         if (!def.derive && !(def.field in data)) {
           continue;
@@ -398,12 +401,18 @@ class Sunenergyxt500 extends utils.Adapter {
           continue;
         }
         const id = `${base}.${def.id}`;
-        if (def.write) {
+        if (force) {
+          await this.setStateAsync(id, { val: value, ack: true });
+          if (def.write) {
+            this.confirmedCache.set(id, value);
+          }
+        } else if (def.write) {
           await this.confirmControlState(id, value);
         } else {
           await this.setStateChangedAsync(id, value, true);
         }
       }
+      h.firstPollDone = true;
       await this.guardMeterMode(h, data);
       await this.setStateChangedAsync(`${base}.info.rawResponse`, body, true);
       h.soc = num(data.SC);
@@ -434,33 +443,32 @@ class Sunenergyxt500 extends utils.Adapter {
   /** Computes the combined view across all online heads. */
   async computeAggregates() {
     const online = this.heads.filter((h) => h.online);
-    await this.setStateChangedAsync("total.onlineCount", online.length, true);
-    await this.setStateChangedAsync(
-      "total.gridPower",
-      Math.round(online.reduce((acc, h) => {
-        var _a;
-        return acc + ((_a = h.gp) != null ? _a : 0);
-      }, 0)),
-      true
-    );
-    await this.setStateChangedAsync(
-      "total.batteryPower",
-      Math.round(online.reduce((acc, h) => {
-        var _a;
-        return acc + ((_a = h.bp) != null ? _a : 0);
-      }, 0)),
-      true
-    );
-    await this.setStateChangedAsync(
-      "total.maxPower",
-      Math.round(online.reduce((acc, h) => acc + h.maxPower, 0)),
-      true
-    );
+    const force = !this.aggregatesForced && online.length > 0;
+    const write = async (id, val) => {
+      if (force) {
+        await this.setStateAsync(id, { val, ack: true });
+      } else {
+        await this.setStateChangedAsync(id, val, true);
+      }
+    };
+    await write("total.onlineCount", online.length);
+    await write("total.gridPower", Math.round(online.reduce((acc, h) => {
+      var _a;
+      return acc + ((_a = h.gp) != null ? _a : 0);
+    }, 0)));
+    await write("total.batteryPower", Math.round(online.reduce((acc, h) => {
+      var _a;
+      return acc + ((_a = h.bp) != null ? _a : 0);
+    }, 0)));
+    await write("total.maxPower", Math.round(online.reduce((acc, h) => acc + h.maxPower, 0)));
     const withSoc = online.filter((h) => h.soc !== void 0);
     if (withSoc.length) {
       const weight = withSoc.reduce((acc, h) => acc + h.packs, 0) || 1;
       const soc = withSoc.reduce((acc, h) => acc + h.soc * h.packs, 0) / weight;
-      await this.setStateChangedAsync("total.soc", Math.round(soc * 10) / 10, true);
+      await write("total.soc", Math.round(soc * 10) / 10);
+    }
+    if (force) {
+      this.aggregatesForced = true;
     }
     const connected = online.length > 0;
     await this.setStateChangedAsync("info.connection", connected, true);
