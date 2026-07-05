@@ -723,6 +723,8 @@ class Sunenergyxt500 extends utils.Adapter {
       return;
     }
     const cfg = {
+      // Adaptive tiers by default; missing key (pre-0.2.7 installs) means adaptive.
+      adaptive: this.config.controllerAdaptive !== false,
       targetW: Math.max(-200, Math.min(200, (0, import_states.cfgNum)(this.config.controllerTargetW, 0))),
       gain: (0, import_states.cfgNum)(this.config.controllerGain, 0.3),
       deadBandW: Math.max(0, (0, import_states.cfgNum)(this.config.controllerDeadBandW, 20)),

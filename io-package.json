@@ -1,8 +1,21 @@
 {
 	"common": {
 		"name": "sunenergyxt500",
-		"version": "0.2.6",
+		"version": "0.2.7",
 		"news": {
+			"0.2.7": {
+				"en": "New adaptive control (enabled by default): the controller regulates in three manufacturer-proven tiers — gently on small deviations, immediately on load steps. Disable the checkbox to keep tuning manually; existing installations switch to adaptive with this update. Also: admin help texts, requires admin >= 7.8.23.",
+				"de": "Neue adaptive Regelung (standardmäßig aktiv): der Regler arbeitet in drei herstellererprobten Stufen — sanft bei kleinen Abweichungen, sofort bei Lastsprüngen. Checkbox deaktivieren für manuelles Tuning; bestehende Installationen wechseln mit diesem Update auf adaptiv. Außerdem: Admin-Hilfetexte, benötigt admin >= 7.8.23.",
+				"ru": "Новое адаптивное управление (включено по умолчанию): контроллер регулирует на трех проверенных производителем уровнях — плавно при небольших отклонениях, сразу при скачках нагрузки. Снимите флажок, чтобы продолжить настройку вручную; с этим обновлением существующие установки переключаются на адаптивные. Также: тексты справки для администратора, требуется администратор >= 7.8.23.",
+				"pt": "Novo controle adaptativo (habilitado por padrão): o controlador regula em três níveis comprovados pelo fabricante – suavemente em pequenos desvios, imediatamente em etapas de carga. Desative a caixa de seleção para continuar ajustando manualmente; as instalações existentes mudam para adaptativas com esta atualização. Além disso: textos de ajuda do administrador, requer administrador >= 7.8.23.",
+				"nl": "Nieuwe adaptieve regeling (standaard ingeschakeld): de controller regelt in drie door de fabrikant beproefde niveaus: voorzichtig bij kleine afwijkingen, onmiddellijk bij belastingsstappen. Schakel het selectievakje uit om handmatig te blijven afstemmen; bestaande installaties schakelen met deze update over naar adaptief. Ook: helpteksten voor beheerders, vereist admin >= 7.8.23.",
+				"fr": "Nouveau contrôle adaptatif (activé par défaut) : le contrôleur régule selon trois niveaux éprouvés par le fabricant : en douceur sur de petits écarts, immédiatement sur les étapes de charge. Décochez la case pour continuer le réglage manuellement ; les installations existantes passent à adaptatives avec cette mise à jour. Aussi : textes d'aide de l'administrateur, nécessite admin >= 7.8.23.",
+				"it": "Nuovo controllo adattivo (abilitato per impostazione predefinita): il controller regola in tre livelli collaudati dal produttore: delicatamente su piccole deviazioni, immediatamente su gradini di carico. Disabilitare la casella di controllo per continuare a sintonizzare manualmente; le installazioni esistenti passano ad adattative con questo aggiornamento. Inoltre: testi di aiuto dell'amministratore, richiede admin >= 7.8.23.",
+				"es": "Nuevo control adaptativo (habilitado de forma predeterminada): el controlador regula en tres niveles probados por el fabricante: suavemente en pequeñas desviaciones e inmediatamente en pasos de carga. Desactive la casilla de verificación para seguir sintonizando manualmente; Las instalaciones existentes cambian a adaptativas con esta actualización. Además: textos de ayuda del administrador, requiere administrador >= 7.8.23.",
+				"pl": "Nowa kontrola adaptacyjna (domyślnie włączona): sterownik reguluje na trzech sprawdzonych przez producenta poziomach — delikatnie przy małych odchyleniach, natychmiast przy krokach obciążenia. Usuń zaznaczenie pola wyboru, aby kontynuować strojenie ręcznie; Dzięki tej aktualizacji istniejące instalacje zostaną przełączone na adaptacyjne. Ponadto: teksty pomocy administratora, wymaga administratora >= 7.8.23.",
+				"uk": "Нове адаптивне керування (увімкнено за замовчуванням): контролер регулює на трьох перевірених виробником рівнях — м’яко при невеликих відхиленнях, відразу при ступенях навантаження. Зніміть прапорець, щоб продовжити налаштування вручну; наявні інсталяції перемикаються на адаптивні з цим оновленням. Також: тексти довідки для адміністратора, потрібен адміністратор >= 7.8.23.",
+				"zh-cn": "新的自适应控制（默认启用）：控制器按制造商验证的三个级别进行调节 - 对小偏差进行温和调节，对负载阶跃立即进行调节。禁用该复选框以继续手动调整；现有安装通过此更新切换为自适应。另外：管理员帮助文本，需要管理员 >= 7.8.23。"
+			},
 			"0.2.6": {
 				"en": "Controller: configurable target grid power (e.g. +10 W deliberate draw to never feed in) and a maximum adjustment per correction step (allows a high gain without overshoot). Documentation: the GS setpoint has 1 W resolution (not 10 W as previously documented).",
 				"de": "Regler: einstellbare Ziel-Netzleistung (z. B. +10 W bewusster Bezug, um nie einzuspeisen) und eine maximale Änderung pro Korrekturschritt (erlaubt hohe Verstärkung ohne Überschwingen). Doku: der GS-Sollwert hat 1-W-Auflösung (nicht 10 W wie zuvor dokumentiert).",
@@ -67,19 +80,6 @@
 				"pl": "Zgodność ze modułem sprawdzania repozytoriów: pełne tłumaczenia administracyjne na wszystkie języki (w tym komunikaty modułu sprawdzania poprawności), przetłumaczone informacje o wersji, poprawka schematu jsonConfig dla przycisku testowego i licznika czasu zamykania zarządzanego przez adapter.",
 				"uk": "Відповідність засобу перевірки репозиторію: повні адміністративні переклади всіма мовами (включаючи повідомлення валідатора), перекладені примітки до випуску, виправлення схеми jsonConfig для тестової кнопки та таймера вимкнення, керованого адаптером.",
 				"zh-cn": "存储库检查器合规性：完成所有语言的管理翻译（包括验证器消息）、翻译的发行说明、测试按钮的 jsonConfig 架构修复和适配器管理的关闭计时器。"
-			},
-			"0.2.1": {
-				"en": "Controller robustness: config values of 0 are respected (gain/dead bands), per-head write isolation, anti-windup when a device limits internally, GS is neutralized to 0 when the controller stops. Heads are polled in parallel, the startup cleanup only touches adapter-managed objects, and manual GS writes are rejected while the controller is active.",
-				"de": "Regler-Robustheit: Config-Werte von 0 werden respektiert (Verstärkung/Totbänder), Schreibfehler pro Kopf isoliert, Anti-Windup bei interner Begrenzung des Geräts, GS wird beim Stoppen des Reglers auf 0 neutralisiert. Köpfe werden parallel abgefragt, das Aufräumen beim Start fasst nur adapter-verwaltete Objekte an, manuelle GS-Schreibvorgänge werden bei aktivem Regler abgelehnt.",
-				"ru": "Надежность контроллера: соблюдаются значения конфигурации 0 (зона усиления/мертвая зона), изоляция записи для каждой головки, защита от завершения при внутреннем ограничении устройства, GS нейтрализуется до 0 при остановке контроллера. Головки опрашиваются параллельно, очистка при запуске затрагивает только объекты, управляемые адаптером, а запись GS вручную отклоняется, пока контроллер активен.",
-				"pt": "Robustez do controlador: valores de configuração de 0 são respeitados (ganho/faixas mortas), isolamento de gravação por cabeça, anti-windup quando um dispositivo limita internamente, GS é neutralizado para 0 quando o controlador para. Os cabeçotes são pesquisados ​​em paralelo, a limpeza de inicialização afeta apenas os objetos gerenciados pelo adaptador e as gravações GS manuais são rejeitadas enquanto o controlador está ativo.",
-				"nl": "Robuustheid van de controller: configuratiewaarden van 0 worden gerespecteerd (versterking/dode banden), schrijfisolatie per kop, anti-windup wanneer een apparaat intern beperkt wordt, GS wordt geneutraliseerd naar 0 wanneer de controller stopt. Heads worden parallel ondervraagd, de opstartopschoning heeft alleen betrekking op door de adapter beheerde objecten, en handmatige GS-schrijfbewerkingen worden afgewezen terwijl de controller actief is.",
-				"fr": "Robustesse du contrôleur : les valeurs de configuration à 0 sont respectées (gain/bandes mortes), isolation en écriture par tête, anti-windup lorsqu'un appareil limite en interne, GS est neutralisé à 0 lorsque le contrôleur s'arrête. Les têtes sont interrogées en parallèle, le nettoyage au démarrage ne touche que les objets gérés par l'adaptateur et les écritures GS manuelles sont rejetées lorsque le contrôleur est actif.",
-				"it": "Robustezza del controller: vengono rispettati i valori di configurazione pari a 0 (guadagno/bande morte), isolamento in scrittura per testa, anti-windup quando un dispositivo limita internamente, GS viene neutralizzato a 0 quando il controller si ferma. Le testine vengono interrogate in parallelo, la pulizia all'avvio tocca solo gli oggetti gestiti dall'adattatore e le scritture GS manuali vengono rifiutate mentre il controller è attivo.",
-				"es": "Robustez del controlador: se respetan los valores de configuración de 0 (ganancia/bandas muertas), aislamiento de escritura por cabezal, anti-windup cuando un dispositivo limita internamente, GS se neutraliza a 0 cuando el controlador se detiene. Los cabezales se sondean en paralelo, la limpieza de inicio solo toca los objetos administrados por el adaptador y las escrituras GS manuales se rechazan mientras el controlador está activo.",
-				"pl": "Solidność kontrolera: przestrzegane są wartości konfiguracyjne 0 (wzmocnienie/martwe pasma), izolacja zapisu na każdą głowicę, zabezpieczenie przed windupem, gdy urządzenie ogranicza wewnętrznie, GS jest neutralizowane do 0, gdy kontroler się zatrzymuje. Głowice są odpytywane równolegle, czyszczenie przy uruchomieniu dotyczy tylko obiektów zarządzanych przez adapter, a ręczne zapisy GS są odrzucane, gdy kontroler jest aktywny.",
-				"uk": "Надійність контролера: дотримуються значення конфігурації 0 (зони підсилення/мертвої зони), ізоляція запису на головку, захист від перемотування, коли пристрій обмежує внутрішні, GS нейтралізується до 0, коли контролер зупиняється. Головки опитуються паралельно, очищення при запуску торкається лише об’єктів, керованих адаптером, а ручні записи GS відхиляються, поки контролер активний.",
-				"zh-cn": "控制器稳健性：遵循 0 的配置值（增益/死区）、每个磁头写入隔离、设备内部限制时的抗饱和、控制器停止时 GS 中和为 0。磁头并行轮询，启动清理仅涉及适配器管理的对象，并且在控制器处于活动状态时拒绝手动 GS 写入。"
 			}
 		},
 		"titleLang": {
@@ -163,6 +163,7 @@
 		"controlMode": "off",
 		"gridPowerStateId": "",
 		"gridPowerInverted": false,
+		"controllerAdaptive": true,
 		"controllerTargetW": 0,
 		"controllerGain": 0.3,
 		"controllerDeadBandW": 20,

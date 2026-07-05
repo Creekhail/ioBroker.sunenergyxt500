@@ -4,7 +4,7 @@
 
 import { expect } from 'chai';
 import type { ControllerConfig, ControllerHooks } from './controller';
-import { MultiHeadController } from './controller';
+import { ADAPTIVE_DEAD_BAND_W, adaptiveTierFor, MultiHeadController } from './controller';
 import type { HeadState } from './split';
 
 /** Records every state write so tests can assert on telemetry. */
@@ -79,6 +79,7 @@ function head(partial: Partial<HeadState> & { index: number }): HeadState {
  */
 function cfg(partial: Partial<ControllerConfig> = {}): ControllerConfig {
 	return {
+		adaptive: false,
 		targetW: 0,
 		gain: 1,
 		deadBandW: 0,
@@ -91,6 +92,81 @@ function cfg(partial: Partial<ControllerConfig> = {}): ControllerConfig {
 		...partial,
 	};
 }
+
+describe('adaptiveTierFor', () => {
+	it('selects the manufacturer tiers by error magnitude', () => {
+		expect(adaptiveTierFor(0)).to.deep.include({ intervalMs: 7000, maxStepW: 20 });
+		expect(adaptiveTierFor(29)).to.deep.include({ intervalMs: 7000, maxStepW: 20 });
+		expect(adaptiveTierFor(30)).to.deep.include({ intervalMs: 2500, maxStepW: 120 });
+		expect(adaptiveTierFor(149)).to.deep.include({ intervalMs: 2500, maxStepW: 120 });
+		expect(adaptiveTierFor(150)).to.deep.include({ intervalMs: 1000, maxStepW: 450 });
+		expect(adaptiveTierFor(5000)).to.deep.include({ intervalMs: 1000, maxStepW: 450 });
+	});
+});
+
+describe('MultiHeadController (adaptive mode)', () => {
+	it('corrects a small deviation with the small-tier step cap', async () => {
+		const heads = [head({ index: 1 })];
+		const { hooks, writes } = mockHooks(heads);
+		const ctrl = new MultiHeadController(mockAdapter().adapter, hooks, 'x.y.z', cfg({ adaptive: true }));
+		await ctrl.start();
+		writes.length = 0;
+		await ctrl.onGridPower(25); // small tier: full error wanted, capped at 20 W step
+		expect(writes).to.deep.equal([{ index: 1, gs: 20 }]);
+	});
+
+	it('ignores errors inside the fixed adaptive dead band', async () => {
+		const heads = [head({ index: 1 })];
+		const { hooks, writes } = mockHooks(heads);
+		const ctrl = new MultiHeadController(mockAdapter().adapter, hooks, 'x.y.z', cfg({ adaptive: true }));
+		await ctrl.start();
+		writes.length = 0;
+		await ctrl.onGridPower(ADAPTIVE_DEAD_BAND_W - 1);
+		expect(writes).to.deep.equal([]);
+	});
+
+	it('reacts immediately to a large load step with the large-tier cap', async () => {
+		const heads = [head({ index: 1 })];
+		const { hooks, writes } = mockHooks(heads);
+		const ctrl = new MultiHeadController(mockAdapter().adapter, hooks, 'x.y.z', cfg({ adaptive: true }));
+		await ctrl.start();
+		writes.length = 0;
+		await ctrl.onGridPower(1000); // large tier: capped at 450 W movement
+		expect(writes).to.deep.equal([{ index: 1, gs: 450 }]);
+	});
+
+	it('throttles small corrections by the 7 s tier interval but lets a load step through', async () => {
+		const heads = [head({ index: 1 })];
+		const { hooks, writes } = mockHooks(heads);
+		const ctrl = new MultiHeadController(mockAdapter().adapter, hooks, 'x.y.z', cfg({ adaptive: true }));
+		await ctrl.start();
+		writes.length = 0;
+		await ctrl.onGridPower(25); // writes 20, sets lastWriteTime
+		await ctrl.onGridPower(25); // small tier: inside the 7 s interval → skipped
+		expect(writes).to.deep.equal([{ index: 1, gs: 20 }]);
+		// Pretend 1.5 s passed: still inside the small tier interval, but a big error
+		// selects the large tier (1 s) and passes.
+		(ctrl as unknown as { lastWriteTime: number }).lastWriteTime = Date.now() - 1500;
+		await ctrl.onGridPower(500);
+		expect(writes.length).to.equal(2);
+		expect(writes[1].gs).to.equal(20 + 450); // large-tier step from the current base
+	});
+
+	it('regulates towards the target grid power in adaptive mode too', async () => {
+		const heads = [head({ index: 1 })];
+		const { hooks, writes } = mockHooks(heads);
+		const ctrl = new MultiHeadController(
+			mockAdapter().adapter,
+			hooks,
+			'x.y.z',
+			cfg({ adaptive: true, targetW: 100 }),
+		);
+		await ctrl.start();
+		writes.length = 0;
+		await ctrl.onGridPower(120); // 20 W above the 100 W draw target → small tier
+		expect(writes).to.deep.equal([{ index: 1, gs: 20 }]);
+	});
+});
 
 describe('MultiHeadController', () => {
 	it('starts by neutralizing all heads to GS=0', async () => {

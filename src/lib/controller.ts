@@ -27,8 +27,47 @@ import type { HeadState } from './split';
 import { computeTotalTarget, splitTarget } from './split';
 import type { LocalizedName } from './states';
 
+/** One regulation tier of the adaptive mode. */
+export interface AdaptiveTier {
+	/** This tier applies while the absolute grid error is below this bound (W). */
+	maxErrorW: number;
+	/** Minimum time between two corrections in this tier (ms). */
+	intervalMs: number;
+	/** Maximum setpoint movement per correction in this tier (W). */
+	maxStepW: number;
+}
+
+/**
+ * Fixed tiers of the adaptive mode — the manufacturer-proven values from the
+ * official zero-feed-in blueprint: react gently to small deviations, promptly to
+ * medium ones and immediately (with a large step) to real load changes.
+ */
+export const ADAPTIVE_TIERS: AdaptiveTier[] = [
+	{ maxErrorW: 30, intervalMs: 7000, maxStepW: 20 },
+	{ maxErrorW: 150, intervalMs: 2500, maxStepW: 120 },
+	{ maxErrorW: Number.POSITIVE_INFINITY, intervalMs: 1000, maxStepW: 450 },
+];
+
+/** Fixed dead band of the adaptive mode (W): errors below it are left alone. */
+export const ADAPTIVE_DEAD_BAND_W = 5;
+
+/**
+ * Picks the adaptive tier for an absolute grid error.
+ *
+ * @param errorAbsW absolute deviation from the target grid power in W
+ */
+export function adaptiveTierFor(errorAbsW: number): AdaptiveTier {
+	return ADAPTIVE_TIERS.find(t => errorAbsW < t.maxErrorW) ?? ADAPTIVE_TIERS[ADAPTIVE_TIERS.length - 1];
+}
+
 /** Tuning parameters of the self-consumption controller. */
 export interface ControllerConfig {
+	/**
+	 * Adaptive mode: regulate in the fixed ADAPTIVE_TIERS (gain 1, per-tier interval
+	 * and step limit, fixed dead band). When false, the manual gain/deadBandW/
+	 * minIntervalMs/maxStepW settings below apply instead.
+	 */
+	adaptive: boolean;
 	/**
 	 * Target grid power in W (source-state convention: >0 = deliberate grid draw,
 	 * <0 = deliberate feed-in). 0 = classic zero feed-in.
@@ -172,13 +211,20 @@ export class MultiHeadController {
 		if (this.writeInProgress) {
 			return;
 		}
-		const now = Date.now();
-		if (now - this.lastWriteTime < this.cfg.minIntervalMs) {
-			return;
-		}
 		// Regulate towards the configured target grid power (0 = zero feed-in).
 		const error = gridPower - this.cfg.targetW;
-		if (Math.abs(error) < this.cfg.deadBandW) {
+		// Effective parameters: adaptive mode picks them per error tier (gain 1),
+		// manual mode uses the configured values.
+		const tier = this.cfg.adaptive ? adaptiveTierFor(Math.abs(error)) : undefined;
+		const minIntervalMs = tier ? tier.intervalMs : this.cfg.minIntervalMs;
+		const deadBandW = tier ? ADAPTIVE_DEAD_BAND_W : this.cfg.deadBandW;
+		const gain = tier ? 1 : this.cfg.gain;
+		const maxStepW = tier ? tier.maxStepW : this.cfg.maxStepW;
+		const now = Date.now();
+		if (now - this.lastWriteTime < minIntervalMs) {
+			return;
+		}
+		if (Math.abs(error) < deadBandW) {
 			return; // grid close enough to the target — nothing to correct
 		}
 		const heads = this.hooks.getHeads().filter(h => h.online);
@@ -194,12 +240,12 @@ export class MultiHeadController {
 			0,
 		);
 		const sumMax = heads.reduce((acc, h) => acc + Math.abs(h.maxPower), 0);
-		let totalTarget = computeTotalTarget(base, error, this.cfg.gain, sumMax);
+		let totalTarget = computeTotalTarget(base, error, gain, sumMax);
 		// Step limit: cap the movement per correction so a meter spike cannot slam
 		// the setpoint even with a high gain (manufacturer blueprint does the same).
-		if (this.cfg.maxStepW > 0) {
-			const lo = Math.max(base - this.cfg.maxStepW, -sumMax);
-			const hi = Math.min(base + this.cfg.maxStepW, sumMax);
+		if (maxStepW > 0) {
+			const lo = Math.max(base - maxStepW, -sumMax);
+			const hi = Math.min(base + maxStepW, sumMax);
 			totalTarget = Math.round(Math.max(lo, Math.min(hi, totalTarget)));
 		}
 		const setpoints = splitTarget(totalTarget, heads);

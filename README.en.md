@@ -71,6 +71,7 @@ In both control modes the adapter **owns `MM`**: on every poll it checks each he
 
 *Adapter controller* (Mode B) — fields:
 * **Grid-power source state** — a foreign state holding your house meter's grid power. Convention: `>0` = grid draw, `<0` = feed-in. Enable **Invert source sign** if your meter uses the opposite convention.
+* **Adaptive control** (default on): regulates in three manufacturer-proven tiers — small deviations gently (every 7 s, 20 W steps), medium ones every 2.5 s (120 W), large load steps immediately (450 W), with a fixed 5 W dead band. Disable it to tune the controller manually via the gain / dead band / write interval / step-limit fields (they only appear then).
 * **Target grid power** (W, default 0): 0 = zero feed-in; positive values keep a small deliberate grid draw (never feed in), negative values a small deliberate feed-in — same sign convention as the source state (`>0` = draw).
 * **Max. adjustment per correction** (W, default 500, 0 = unlimited): caps how far the setpoint moves per control step, so a high gain cannot overshoot on meter spikes.
 * **Gain** (default 0.3), **Dead band** (W), **Min. write interval** (ms), **Per-head write dead band** (W — minimum change of a head's setpoint before it is re-written, to avoid chatter as the split shifts). Each head's maximum power is **detected automatically** from the device (800 W for a 500, 2400 W for a 500 PRO), so mixed setups work without extra configuration.
@@ -106,7 +107,7 @@ The adapter binds the meter (`MM=1` + `MD`) and the device regulates itself; the
 | **Min. write interval** | cadence of corrections | faster settling (floor 1000 ms) | fewer device writes, slower tracking |
 | **Per-head write dead band** | suppresses mini-redistributions between heads (multi-head) | more precise | less chatter |
 
-**Two proven profiles:** *Relaxed* (the defaults — calm, minimal device writes, ±20–30 W band) and *Precise* (gain 0.8–1.0 · dead band 0 · interval 1000 ms · write dead band 0 — ±10–20 W band, settling in 1–3 s). Over a day both end up with practically the same energy balance — the difference is chart cosmetics, not money.
+**Adaptive control** (the default) picks its pace automatically per tier. For the manual mode, two proven profiles: *Relaxed* (the defaults — calm, minimal device writes, ±20–30 W band) and *Precise* (gain 0.8–1.0 · dead band 0 · interval 1000 ms · write dead band 0 — ±10–20 W band, settling in 1–3 s). Over a day both end up with practically the same energy balance — the difference is chart cosmetics, not money.
 
 ## Sign conventions
 

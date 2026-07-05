@@ -71,6 +71,7 @@ In beiden Steuermodi **besitzt der Adapter `MM`**: bei jedem Poll prüft er das 
 
 *Adapter-Regler* (Modus B) — Felder:
 * **Quell-State Netzleistung** — ein Fremd-State mit der Netzleistung deines Hauszählers. Konvention: `>0` = Netzbezug, `<0` = Einspeisung. **Vorzeichen invertieren** aktivieren, falls dein Zähler die umgekehrte Konvention nutzt.
+* **Adaptive Regelung** (Standard an): regelt in drei herstellererprobten Stufen — kleine Abweichungen sanft (alle 7 s, 20-W-Schritte), mittlere alle 2,5 s (120 W), große Lastsprünge sofort (450 W), mit festem 5-W-Totband. Deaktivieren, um den Regler manuell über die Felder Verstärkung / Totband / Schreibintervall / Schritt-Limit einzustellen (erscheinen nur dann).
 * **Ziel-Netzleistung** (W, Standard 0): 0 = Nulleinspeisung; positive Werte halten bewusst einen kleinen Netzbezug (nie einspeisen), negative eine kleine Einspeisung — gleiche Vorzeichenkonvention wie der Quell-State (`>0` = Bezug).
 * **Max. Änderung pro Korrektur** (W, Standard 500, 0 = unbegrenzt): begrenzt, wie weit sich der Sollwert pro Regelschritt bewegt — hohe Verstärkung kann so bei Zähler-Ausreißern nicht überschwingen.
 * **Verstärkung** (Standard 0.3), **Totband** (W), **Min. Schreibintervall** (ms), **Per-Kopf-Schreib-Totband** (W — minimale Änderung des Kopf-Sollwerts, bevor er erneut geschrieben wird, gegen Zappeln bei sich verschiebender Aufteilung). Die Maximalleistung jedes Kopfes wird **automatisch** vom Gerät erkannt (800 W beim 500, 2400 W beim 500 PRO), Mischbetrieb funktioniert also ohne Zusatzkonfiguration.
@@ -106,7 +107,7 @@ Der Adapter bindet den Zähler (`MM=1` + `MD`) und das Gerät regelt selbst; der
 | **Min. Schreibintervall** | Takt der Korrekturen | schnelleres Ausregeln (Untergrenze 1000 ms) | weniger Gerätezugriffe, langsameres Nachführen |
 | **Per-Kopf-Schreib-Totband** | unterdrückt Mini-Umverteilungen zwischen Köpfen (Mehrkopf) | präziser | weniger Zappeln |
 
-**Zwei erprobte Profile:** *Gelassen* (Standardwerte — ruhig, minimale Gerätezugriffe, Band ±20–30 W) und *Präzise* (Verstärkung 0,8–1,0 · Totband 0 · Intervall 1000 ms · Schreib-Totband 0 — Band ±10–20 W, Ausregeln in 1–3 s). Beide erreichen über den Tag praktisch dieselbe Energiebilanz — der Unterschied ist Optik im Diagramm, nicht Geld.
+**Adaptive Regelung** (Standard) wählt ihr Tempo automatisch je Stufe. Für den manuellen Modus zwei erprobte Profile: *Gelassen* (Standardwerte — ruhig, minimale Gerätezugriffe, Band ±20–30 W) und *Präzise* (Verstärkung 0,8–1,0 · Totband 0 · Intervall 1000 ms · Schreib-Totband 0 — Band ±10–20 W, Ausregeln in 1–3 s). Beide erreichen über den Tag praktisch dieselbe Energiebilanz — der Unterschied ist Optik im Diagramm, nicht Geld.
 
 ## Vorzeichenkonventionen
 

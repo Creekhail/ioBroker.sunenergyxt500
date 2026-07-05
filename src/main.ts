@@ -826,6 +826,8 @@ class Sunenergyxt500 extends utils.Adapter {
 		}
 		// cfgNum keeps explicit zeros (gain/dead bands of 0 must not become defaults).
 		const cfg: ControllerConfig = {
+			// Adaptive tiers by default; missing key (pre-0.2.7 installs) means adaptive.
+			adaptive: this.config.controllerAdaptive !== false,
 			targetW: Math.max(-200, Math.min(200, cfgNum(this.config.controllerTargetW, 0))),
 			gain: cfgNum(this.config.controllerGain, 0.3),
 			deadBandW: Math.max(0, cfgNum(this.config.controllerDeadBandW, 20)),

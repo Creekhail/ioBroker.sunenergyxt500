@@ -18,11 +18,24 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var controller_exports = {};
 __export(controller_exports, {
+  ADAPTIVE_DEAD_BAND_W: () => ADAPTIVE_DEAD_BAND_W,
+  ADAPTIVE_TIERS: () => ADAPTIVE_TIERS,
   MultiHeadController: () => MultiHeadController,
+  adaptiveTierFor: () => adaptiveTierFor,
   controllerStateDefs: () => controllerStateDefs
 });
 module.exports = __toCommonJS(controller_exports);
 var import_split = require("./split");
+const ADAPTIVE_TIERS = [
+  { maxErrorW: 30, intervalMs: 7e3, maxStepW: 20 },
+  { maxErrorW: 150, intervalMs: 2500, maxStepW: 120 },
+  { maxErrorW: Number.POSITIVE_INFINITY, intervalMs: 1e3, maxStepW: 450 }
+];
+const ADAPTIVE_DEAD_BAND_W = 5;
+function adaptiveTierFor(errorAbsW) {
+  var _a;
+  return (_a = ADAPTIVE_TIERS.find((t) => errorAbsW < t.maxErrorW)) != null ? _a : ADAPTIVE_TIERS[ADAPTIVE_TIERS.length - 1];
+}
 const controllerStateDefs = [
   {
     id: "controller.status",
@@ -112,12 +125,17 @@ class MultiHeadController {
     if (this.writeInProgress) {
       return;
     }
+    const error = gridPower - this.cfg.targetW;
+    const tier = this.cfg.adaptive ? adaptiveTierFor(Math.abs(error)) : void 0;
+    const minIntervalMs = tier ? tier.intervalMs : this.cfg.minIntervalMs;
+    const deadBandW = tier ? ADAPTIVE_DEAD_BAND_W : this.cfg.deadBandW;
+    const gain = tier ? 1 : this.cfg.gain;
+    const maxStepW = tier ? tier.maxStepW : this.cfg.maxStepW;
     const now = Date.now();
-    if (now - this.lastWriteTime < this.cfg.minIntervalMs) {
+    if (now - this.lastWriteTime < minIntervalMs) {
       return;
     }
-    const error = gridPower - this.cfg.targetW;
-    if (Math.abs(error) < this.cfg.deadBandW) {
+    if (Math.abs(error) < deadBandW) {
       return;
     }
     const heads = this.hooks.getHeads().filter((h) => h.online);
@@ -132,10 +150,10 @@ class MultiHeadController {
       0
     );
     const sumMax = heads.reduce((acc, h) => acc + Math.abs(h.maxPower), 0);
-    let totalTarget = (0, import_split.computeTotalTarget)(base, error, this.cfg.gain, sumMax);
-    if (this.cfg.maxStepW > 0) {
-      const lo = Math.max(base - this.cfg.maxStepW, -sumMax);
-      const hi = Math.min(base + this.cfg.maxStepW, sumMax);
+    let totalTarget = (0, import_split.computeTotalTarget)(base, error, gain, sumMax);
+    if (maxStepW > 0) {
+      const lo = Math.max(base - maxStepW, -sumMax);
+      const hi = Math.min(base + maxStepW, sumMax);
       totalTarget = Math.round(Math.max(lo, Math.min(hi, totalTarget)));
     }
     const setpoints = (0, import_split.splitTarget)(totalTarget, heads);
@@ -268,7 +286,10 @@ function errMsg(e) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  ADAPTIVE_DEAD_BAND_W,
+  ADAPTIVE_TIERS,
   MultiHeadController,
+  adaptiveTierFor,
   controllerStateDefs
 });
 //# sourceMappingURL=controller.js.map

@@ -201,9 +201,19 @@
 					"type": "select",
 					"label": "Control mode",
 					"options": [
-						{ "label": "Off (monitoring only)", "value": "off" },
-						{ "label": "Adapter controller (any meter, 1–3 heads)", "value": "controller" },
-						{ "label": "Device self-regulation (single head)", "value": "device", "hidden": "!!data.head2Host || !!data.head3Host" }
+						{
+							"label": "Off (monitoring only)",
+							"value": "off"
+						},
+						{
+							"label": "Adapter controller (any meter, 1–3 heads)",
+							"value": "controller"
+						},
+						{
+							"label": "Device self-regulation (single head)",
+							"value": "device",
+							"hidden": "!!data.head2Host || !!data.head3Host"
+						}
 					],
 					"default": "off",
 					"validator": "data.controlMode !== 'device' || (!data.head2Host && !data.head3Host)",
@@ -261,6 +271,19 @@
 					"lg": 3,
 					"xl": 3
 				},
+				"controllerAdaptive": {
+					"type": "checkbox",
+					"label": "Adaptive control",
+					"default": true,
+					"help": "Regulates in three manufacturer-proven tiers: small deviations gently (every 7 s, 20 W steps), medium ones every 2.5 s (120 W), large load steps immediately (450 W); fixed 5 W dead band. Disable to tune gain, dead band, interval and step limit manually.",
+					"hidden": "data.controlMode !== 'controller'",
+					"newLine": true,
+					"xs": 12,
+					"sm": 12,
+					"md": 6,
+					"lg": 4,
+					"xl": 4
+				},
 				"controllerTargetW": {
 					"type": "number",
 					"label": "Target grid power (W)",
@@ -285,7 +308,7 @@
 					"step": 10,
 					"default": 500,
 					"help": "Limits how far the setpoint moves per control step — allows a high gain without overshoot on meter spikes. 0 = unlimited.",
-					"hidden": "data.controlMode !== 'controller'",
+					"hidden": "data.controlMode !== 'controller' || data.controllerAdaptive",
 					"xs": 12,
 					"sm": 6,
 					"md": 3,
@@ -300,7 +323,7 @@
 					"step": 0.05,
 					"default": 0.3,
 					"help": "Fraction of the grid deviation corrected per step: 0.3 = smooth (several steps), 1.0 = full correction in one step. Values above 1 can overshoot.",
-					"hidden": "data.controlMode !== 'controller'",
+					"hidden": "data.controlMode !== 'controller' || data.controllerAdaptive",
 					"xs": 12,
 					"sm": 6,
 					"md": 3,
@@ -314,7 +337,7 @@
 					"max": 500,
 					"default": 20,
 					"help": "Grid deviations below this are not corrected. 0 = correct everything; larger values keep the controller quiet but leave a small permanent deviation.",
-					"hidden": "data.controlMode !== 'controller'",
+					"hidden": "data.controlMode !== 'controller' || data.controllerAdaptive",
 					"xs": 12,
 					"sm": 6,
 					"md": 3,
@@ -328,7 +351,7 @@
 					"max": 60000,
 					"default": 5000,
 					"help": "Minimum time between two corrections. Lower values settle faster but write to the devices more often (floor: 1000 ms).",
-					"hidden": "data.controlMode !== 'controller'",
+					"hidden": "data.controlMode !== 'controller' || data.controllerAdaptive",
 					"xs": 12,
 					"sm": 6,
 					"md": 3,
@@ -405,10 +428,22 @@
 					"type": "select",
 					"label": "Meter type",
 					"options": [
-						{ "label": "EcoTracker (direct / IP)", "value": "ecotracker" },
-						{ "label": "Shelly 3EM", "value": "shelly3em" },
-						{ "label": "Shelly Pro 3EM", "value": "shellypro3em" },
-						{ "label": "Tasmota", "value": "tasmota" }
+						{
+							"label": "EcoTracker (direct / IP)",
+							"value": "ecotracker"
+						},
+						{
+							"label": "Shelly 3EM",
+							"value": "shelly3em"
+						},
+						{
+							"label": "Shelly Pro 3EM",
+							"value": "shellypro3em"
+						},
+						{
+							"label": "Tasmota",
+							"value": "tasmota"
+						}
 					],
 					"default": "shellypro3em",
 					"hidden": "data.controlMode !== 'device'",
@@ -442,50 +477,182 @@
 					"lg": 4,
 					"xl": 4,
 					"options": [
-						{ "label": "APOX", "value": "APOX" },
-						{ "label": "LEPUS", "value": "LEPUS" },
-						{ "label": "Norax", "value": "Norax" },
-						{ "label": "PICUS", "value": "PICUS" },
-						{ "label": "GS303", "value": "GS303" },
-						{ "label": "DWZE12", "value": "DWZE12" },
-						{ "label": "DWS7410", "value": "DWS7410" },
-						{ "label": "DWS7412", "value": "DWS7412" },
-						{ "label": "DWS7420", "value": "DWS7420" },
-						{ "label": "DWS7612", "value": "DWS7612" },
-						{ "label": "DWSB12", "value": "DWSB12" },
-						{ "label": "DWSB20", "value": "DWSB20" },
-						{ "label": "DWSE20", "value": "DWSE20" },
-						{ "label": "M60", "value": "M60" },
-						{ "label": "Q3A", "value": "Q3A" },
-						{ "label": "Q3B", "value": "Q3B" },
-						{ "label": "Q3C", "value": "Q3C" },
-						{ "label": "Q3D", "value": "Q3D" },
-						{ "label": "Q1A", "value": "Q1A" },
-						{ "label": "Q3M", "value": "Q3M" },
-						{ "label": "eBZ", "value": "eBZ" },
-						{ "label": "SGM", "value": "SGM" },
-						{ "label": "AS2020", "value": "AS2020" },
-						{ "label": "AS3500", "value": "AS3500" },
-						{ "label": "eBZD", "value": "eBZD" },
-						{ "label": "ED300L", "value": "ED300L" },
-						{ "label": "ED300S", "value": "ED300S" },
-						{ "label": "EMH", "value": "EMH" },
-						{ "label": "HBZ", "value": "HBZ" },
-						{ "label": "DTZ", "value": "DTZ" },
-						{ "label": "EHZ", "value": "EHZ" },
-						{ "label": "MT175", "value": "MT175" },
-						{ "label": "MT176", "value": "MT176" },
-						{ "label": "MT382", "value": "MT382" },
-						{ "label": "MT631", "value": "MT631" },
-						{ "label": "MT681", "value": "MT681" },
-						{ "label": "MT691", "value": "MT691" },
-						{ "label": "Itron", "value": "Itron" },
-						{ "label": "KAIFA", "value": "KAIFA" },
-						{ "label": "E220", "value": "E220" },
-						{ "label": "E320", "value": "E320" },
-						{ "label": "L20", "value": "L20" },
-						{ "label": "Smarty", "value": "Smarty" },
-						{ "label": "SML", "value": "SML" }
+						{
+							"label": "APOX",
+							"value": "APOX"
+						},
+						{
+							"label": "LEPUS",
+							"value": "LEPUS"
+						},
+						{
+							"label": "Norax",
+							"value": "Norax"
+						},
+						{
+							"label": "PICUS",
+							"value": "PICUS"
+						},
+						{
+							"label": "GS303",
+							"value": "GS303"
+						},
+						{
+							"label": "DWZE12",
+							"value": "DWZE12"
+						},
+						{
+							"label": "DWS7410",
+							"value": "DWS7410"
+						},
+						{
+							"label": "DWS7412",
+							"value": "DWS7412"
+						},
+						{
+							"label": "DWS7420",
+							"value": "DWS7420"
+						},
+						{
+							"label": "DWS7612",
+							"value": "DWS7612"
+						},
+						{
+							"label": "DWSB12",
+							"value": "DWSB12"
+						},
+						{
+							"label": "DWSB20",
+							"value": "DWSB20"
+						},
+						{
+							"label": "DWSE20",
+							"value": "DWSE20"
+						},
+						{
+							"label": "M60",
+							"value": "M60"
+						},
+						{
+							"label": "Q3A",
+							"value": "Q3A"
+						},
+						{
+							"label": "Q3B",
+							"value": "Q3B"
+						},
+						{
+							"label": "Q3C",
+							"value": "Q3C"
+						},
+						{
+							"label": "Q3D",
+							"value": "Q3D"
+						},
+						{
+							"label": "Q1A",
+							"value": "Q1A"
+						},
+						{
+							"label": "Q3M",
+							"value": "Q3M"
+						},
+						{
+							"label": "eBZ",
+							"value": "eBZ"
+						},
+						{
+							"label": "SGM",
+							"value": "SGM"
+						},
+						{
+							"label": "AS2020",
+							"value": "AS2020"
+						},
+						{
+							"label": "AS3500",
+							"value": "AS3500"
+						},
+						{
+							"label": "eBZD",
+							"value": "eBZD"
+						},
+						{
+							"label": "ED300L",
+							"value": "ED300L"
+						},
+						{
+							"label": "ED300S",
+							"value": "ED300S"
+						},
+						{
+							"label": "EMH",
+							"value": "EMH"
+						},
+						{
+							"label": "HBZ",
+							"value": "HBZ"
+						},
+						{
+							"label": "DTZ",
+							"value": "DTZ"
+						},
+						{
+							"label": "EHZ",
+							"value": "EHZ"
+						},
+						{
+							"label": "MT175",
+							"value": "MT175"
+						},
+						{
+							"label": "MT176",
+							"value": "MT176"
+						},
+						{
+							"label": "MT382",
+							"value": "MT382"
+						},
+						{
+							"label": "MT631",
+							"value": "MT631"
+						},
+						{
+							"label": "MT681",
+							"value": "MT681"
+						},
+						{
+							"label": "MT691",
+							"value": "MT691"
+						},
+						{
+							"label": "Itron",
+							"value": "Itron"
+						},
+						{
+							"label": "KAIFA",
+							"value": "KAIFA"
+						},
+						{
+							"label": "E220",
+							"value": "E220"
+						},
+						{
+							"label": "E320",
+							"value": "E320"
+						},
+						{
+							"label": "L20",
+							"value": "L20"
+						},
+						{
+							"label": "Smarty",
+							"value": "Smarty"
+						},
+						{
+							"label": "SML",
+							"value": "SML"
+						}
 					]
 				}
 			}

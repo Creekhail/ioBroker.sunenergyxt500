@@ -21,6 +21,8 @@ declare global {
 			// Mode B — self-consumption controller (one loop, split across heads)
 			gridPowerStateId: string;
 			gridPowerInverted: boolean;
+			// Adaptive mode: fixed manufacturer-proven tiers; false = manual tuning fields.
+			controllerAdaptive: boolean;
 			// Target grid power in W (>0 = deliberate draw, <0 = deliberate feed-in; 0 = zero feed-in).
 			controllerTargetW: number;
 			controllerGain: number;
