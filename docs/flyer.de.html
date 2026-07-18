@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 8mm 13mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: #1f2933;
+    font-size: 9.7pt;
+    line-height: 1.4;
+    zoom: 0.955;
+  }
+  :root {
+    --green: #2e9e5b;
+    --green-dark: #1f7a44;
+    --ink: #1f2933;
+    --muted: #5b6b7b;
+    --line: #e2e8ee;
+    --bg-soft: #f4f8f5;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding-bottom: 10px;
+    border-bottom: 3px solid var(--green);
+  }
+  .header img { width: 55px; height: 55px; flex: none; }
+  .header .titles h1 {
+    font-size: 17pt;
+    color: var(--green-dark);
+    line-height: 1.15;
+    letter-spacing: -0.2px;
+  }
+  .header .titles .sub {
+    font-size: 10.2pt;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+
+  /* Intro */
+  .intro {
+    margin: 10px 0 3px;
+    font-size: 9.9pt;
+  }
+  .intro strong { color: var(--ink); }
+
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin: 9px 0 3px;
+  }
+  .badge {
+    background: var(--bg-soft);
+    border: 1px solid #d3e6d9;
+    color: var(--green-dark);
+    font-size: 8.6pt;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 12px;
+  }
+
+  h2 {
+    font-size: 11.2pt;
+    color: var(--green-dark);
+    margin: 9px 0 5px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  ul { list-style: none; }
+  li {
+    position: relative;
+    padding-left: 17px;
+    margin-bottom: 2px;
+  }
+  li::before {
+    content: "";
+    position: absolute;
+    left: 2px; top: 7px;
+    width: 6px; height: 6px;
+    background: var(--green);
+    border-radius: 50%;
+  }
+  li b { color: var(--ink); }
+
+  /* Two-column modes */
+  .modes { display: flex; gap: 11px; margin-top: 3px; }
+  .mode {
+    flex: 1;
+    background: var(--bg-soft);
+    border: 1px solid #d9e7de;
+    border-radius: 8px;
+    padding: 9px 11px;
+  }
+  .mode h3 {
+    font-size: 10.2pt;
+    color: var(--green-dark);
+    margin-bottom: 4px;
+  }
+  .mode p { font-size: 9.5pt; color: #33414f; }
+  .mode .tag {
+    display: inline-block;
+    font-size: 8pt;
+    font-weight: 700;
+    color: #fff;
+    background: var(--green);
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-bottom: 6px;
+  }
+  .mode .tag.grey { background: #90a1b0; }
+
+  .req { columns: 2; column-gap: 24px; }
+  .req li { break-inside: avoid; }
+
+  /* Steps */
+  ol.steps { counter-reset: s; list-style: none; }
+  ol.steps li {
+    counter-increment: s;
+    padding-left: 26px;
+    margin-bottom: 4px;
+  }
+  ol.steps li::before {
+    content: counter(s);
+    left: 0; top: 1px;
+    width: 17px; height: 17px;
+    background: var(--green);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 8.5pt;
+    font-weight: 700;
+    text-align: center;
+    line-height: 17px;
+  }
+
+  /* Tester callout */
+  .callout {
+    background: #fff9ec;
+    border: 1px solid #f2e2b8;
+    border-left: 4px solid #e0a800;
+    border-radius: 6px;
+    padding: 9px 13px;
+    margin-top: 5px;
+  }
+  .callout h2 { border: none; margin: 0 0 4px; color: #9a7400; }
+
+  /* Links box */
+  .links {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+  }
+  .linkbox {
+    flex: 1;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 13px;
+  }
+  .linkbox .lbl {
+    font-size: 8.4pt;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .linkbox a {
+    font-size: 9.3pt;
+    color: var(--green-dark);
+    word-break: break-all;
+    text-decoration: none;
+  }
+
+  .footer {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+    font-size: 8.3pt;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .footer .disc { max-width: 66%; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <img src="../admin/sunenergyxt500.png" alt="Logo">
+    <div class="titles">
+      <h1>ioBroker-Adapter für SunEnergyXT 500 / 500&nbsp;PRO</h1>
+      <div class="sub">Lokale Integration &amp; Eigenverbrauchsregelung – ganz ohne Cloud</div>
+    </div>
+  </div>
+
+  <p class="intro">
+    Ich habe für <strong>ioBroker</strong> einen Adapter entwickelt, der den SunEnergyXT 500 und
+    500&nbsp;PRO vollständig über die <strong>lokale HTTP-API</strong> des Geräts anbindet – ohne
+    Hersteller-Cloud und ohne Konto. Eine Instanz verwaltet <strong>bis zu drei Kopfspeicher</strong>.
+    Der Adapter ist <strong>kostenlos, quelloffen (MIT)</strong> und offiziell im ioBroker-Repository
+    gelistet. Ich betreibe ihn selbst produktiv an meiner eigenen Anlage.
+  </p>
+
+  <div class="badges">
+    <span class="badge">100&nbsp;% lokal</span>
+    <span class="badge">Kein Cloud-Konto</span>
+    <span class="badge">1–3 Köpfe je Instanz</span>
+    <span class="badge">Open Source (MIT)</span>
+    <span class="badge">Offiziell gelistet</span>
+  </div>
+
+  <h2>Was der Adapter kann</h2>
+  <ul>
+    <li><b>Vollständiges Monitoring:</b> Ladezustand (SoC), Batterie-/Netz-/Last-/PV-Leistung,
+      Strom &amp; Spannung je MPPT, Tagesenergiezähler, SoC je Erweiterungspack sowie Geräte- und Firmware-Infos.</li>
+    <li><b>Eigenverbrauchsregelung:</b> schreibt den Netz-Sollwert und regelt auf Nulleinspeisung –
+      mit Watchdog und sicherem Failsafe, wenn der Zähler ausfällt.</li>
+    <li><b>Steuerbare Einstellungen:</b> u.&nbsp;a. min-/max-SoC-Grenzen, Einspeisegrenze,
+      Eigenverbrauchsmodus und Zählerkonfiguration – direkt aus ioBroker heraus.</li>
+    <li><b>Bis zu drei Köpfe in einer Instanz:</b> der Regler berechnet einen Gesamt-Sollwert und
+      verteilt ihn automatisch auf die Online-Köpfe.</li>
+    <li><b>Rohdaten immer verfügbar:</b> die komplette Geräteantwort liegt zusätzlich als JSON vor –
+      auch Felder, die (noch) keinen eigenen Datenpunkt haben.</li>
+  </ul>
+
+  <h2>Zwei Wege zur Eigenverbrauchsregelung</h2>
+  <div class="modes">
+    <div class="mode">
+      <span class="tag">Empfohlen</span>
+      <h3>Adapter-Regler</h3>
+      <p>Nutzt einen <b>beliebigen</b> ioBroker-Zähler (Shelly, Tasmota, Smartmeter, Modbus …) –
+        auch solche, die der Speicher selbst nicht lesen kann. Funktioniert mit 1–3 Köpfen.</p>
+    </div>
+    <div class="mode">
+      <span class="tag">Einzelkopf</span>
+      <h3>Geräte-Eigenregelung</h3>
+      <p>Bindet einen unterstützten Zähler direkt in den Speicher ein (EcoTracker, Shelly 3EM /
+        Pro&nbsp;3EM, Tasmota); das Gerät regelt dann selbst.</p>
+    </div>
+    <div class="mode">
+      <span class="tag grey">Standard</span>
+      <h3>Nur Monitoring</h3>
+      <p>Der Adapter liest ausschließlich Daten und schreibt nichts – ideal zum gefahrlosen
+        Ausprobieren neben der bestehenden Anlage.</p>
+    </div>
+  </div>
+
+  <h2>Voraussetzungen</h2>
+  <ul class="req">
+    <li>Eine laufende <b>ioBroker</b>-Installation</li>
+    <li>SunEnergyXT 500 / 500&nbsp;PRO im lokalen Netzwerk erreichbar</li>
+    <li><b>Lokaler Modus (LM&nbsp;=&nbsp;1)</b> am Gerät aktiviert*</li>
+    <li>Ein Zähler mit Netzleistung (je nach Steuermodus)</li>
+  </ul>
+  <p style="font-size:8.6pt;color:var(--muted);margin-top:5px;">
+    * Der lokale Modus schaltet die HTTP-API frei und deaktiviert zugleich die Cloud-/App-Fernsteuerung –
+    ab dann läuft alles über ioBroker.
+  </p>
+
+  <h2>Installation in 3 Schritten</h2>
+  <ol class="steps">
+    <li>Im ioBroker-Admin unter <b>Adapter</b> nach <b>„sunenergyxt500"</b> suchen und installieren.</li>
+    <li>In den Instanz-Einstellungen die <b>IP-Adresse(n)</b> der Kopfspeicher eintragen.</li>
+    <li>Für reines Monitoring den Steuermodus auf <b>„Aus"</b> lassen – der Adapter beginnt sofort zu pollen.</li>
+  </ol>
+
+  <div class="callout">
+    <h2>🔎 Tester gesucht</h2>
+    Der Adapter läuft bei mir stabil im Dauerbetrieb. Über Rückmeldungen freue ich mich besonders von:
+    <ul style="margin-top:5px;">
+      <li>Nutzern mit <b>PV-Modulen am Speicher</b> – die PV-Verarbeitung ist mangels eigener Panels noch ungetestet.</li>
+      <li>Betreibern von <b>zwei oder drei Kopfspeichern</b> – zur Validierung der Mehrkopf-Steuerung.</li>
+    </ul>
+  </div>
+
+  <div class="links">
+    <div class="linkbox">
+      <div class="lbl">GitHub &amp; Doku</div>
+      <a href="https://github.com/Creekhail/ioBroker.sunenergyxt500">github.com/Creekhail/ioBroker.sunenergyxt500</a>
+    </div>
+    <div class="linkbox">
+      <div class="lbl">ioBroker-Forum · Test-Thread</div>
+      <a href="https://forum.iobroker.net/topic/84934/test-adapter-sunenergyxt500-v0-2-x-latest">forum.iobroker.net → Tester → sunenergyxt500</a>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="disc">
+      Community-Projekt von <b>Marcus Bortel (Creekhail)</b> · MIT-Lizenz · kein offizielles Produkt von
+      SunEnergyXT. Nutzung auf eigene Verantwortung.
+    </div>
+    <div>ioBroker.sunenergyxt500 · v0.2.7</div>
+  </div>
+
+</body>
+</html>
