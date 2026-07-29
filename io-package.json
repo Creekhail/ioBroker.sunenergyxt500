@@ -1,8 +1,21 @@
 {
 	"common": {
 		"name": "sunenergyxt500",
-		"version": "0.2.7",
+		"version": "0.2.8",
 		"news": {
+			"0.2.8": {
+				"en": "Support for control module firmware ES 1.1.14 (marketed as \"1.1.4\"): the reinstated field PD is exposed as heads.<n>.pv.PD — today’s PV generation energy in raw Wh. Older firmware keeps working unchanged; the state stays empty where the device does not deliver PD.",
+				"de": "Unterstützung für Steuermodul-Firmware ES 1.1.14 (öffentlich „1.1.4“): Das wieder eingeführte Feld PD wird als heads.<n>.pv.PD bereitgestellt — heutige PV-Erzeugungsenergie in rohen Wh. Ältere Firmware läuft unverändert weiter; der State bleibt leer, wenn das Gerät PD nicht liefert.",
+				"ru": "Поддержка прошивки модуля управления ES 1.1.14 (публично «1.1.4»): восстановленное поле PD доступно как heads.<n>.pv.PD — выработка PV за сегодня в необработанных Вт·ч. Старая прошивка продолжает работать без изменений; состояние остаётся пустым, если устройство не передаёт PD.",
+				"pt": "Suporte para o firmware do módulo de controle ES 1.1.14 (divulgado como \"1.1.4\"): o campo PD reintroduzido é exposto como heads.<n>.pv.PD — energia de geração fotovoltaica de hoje em Wh brutos. Firmwares mais antigos continuam funcionando sem alterações; o estado permanece vazio quando o dispositivo não fornece PD.",
+				"nl": "Ondersteuning voor besturingsmodule-firmware ES 1.1.14 (openbaar \"1.1.4\"): het opnieuw ingevoerde veld PD is beschikbaar als heads.<n>.pv.PD — de PV-opbrengst van vandaag in ruwe Wh. Oudere firmware blijft ongewijzigd werken; de state blijft leeg als het apparaat PD niet levert.",
+				"fr": "Prise en charge du micrologiciel du module de contrôle ES 1.1.14 (commercialisé sous « 1.1.4 ») : le champ PD réintroduit est exposé sous heads.<n>.pv.PD — l’énergie photovoltaïque produite aujourd’hui, en Wh bruts. Les micrologiciels plus anciens continuent de fonctionner sans changement ; l’état reste vide si l’appareil ne fournit pas PD.",
+				"it": "Supporto per il firmware del modulo di controllo ES 1.1.14 (commercializzato come \"1.1.4\"): il campo PD reintrodotto è esposto come heads.<n>.pv.PD — energia fotovoltaica prodotta oggi in Wh grezzi. I firmware più vecchi continuano a funzionare senza modifiche; lo stato resta vuoto se il dispositivo non fornisce PD.",
+				"es": "Compatibilidad con el firmware del módulo de control ES 1.1.14 (comercializado como \"1.1.4\"): el campo PD reintroducido se expone como heads.<n>.pv.PD: energía fotovoltaica generada hoy en Wh sin escalar. El firmware antiguo sigue funcionando sin cambios; el estado permanece vacío si el dispositivo no entrega PD.",
+				"pl": "Obsługa oprogramowania modułu sterującego ES 1.1.14 (publicznie „1.1.4”): przywrócone pole PD jest udostępniane jako heads.<n>.pv.PD — dzisiejsza energia wyprodukowana z PV w surowych Wh. Starsze oprogramowanie działa bez zmian; stan pozostaje pusty, gdy urządzenie nie dostarcza PD.",
+				"uk": "Підтримка прошивки модуля керування ES 1.1.14 (публічно «1.1.4»): відновлене поле PD доступне як heads.<n>.pv.PD — сьогоднішня вироблена енергія PV у необроблених Вт·год. Старіші прошивки працюють без змін; стан залишається порожнім, якщо пристрій не передає PD.",
+				"zh-cn": "支持控制模块固件 ES 1.1.14（对外称“1.1.4”）：重新加入的字段 PD 以 heads.<n>.pv.PD 提供 — 今日光伏发电量，原始单位 Wh。旧固件可继续正常使用；设备不提供 PD 时该状态保持为空。"
+			},
 			"0.2.7": {
 				"en": "New adaptive control (enabled by default): the controller regulates in three manufacturer-proven tiers — gently on small deviations, immediately on load steps. Disable the checkbox to keep tuning manually; existing installations switch to adaptive with this update. Also: admin help texts, requires admin >= 7.8.23.",
 				"de": "Neue adaptive Regelung (standardmäßig aktiv): der Regler arbeitet in drei herstellererprobten Stufen — sanft bei kleinen Abweichungen, sofort bei Lastsprüngen. Checkbox deaktivieren für manuelles Tuning; bestehende Installationen wechseln mit diesem Update auf adaptiv. Außerdem: Admin-Hilfetexte, benötigt admin >= 7.8.23.",

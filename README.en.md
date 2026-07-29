@@ -124,7 +124,7 @@ Each head gets its own subtree under **`heads.<n>.*`** (`n` = 1…3), plus combi
 | `heads.<n>.battery.*` | SoC (`SC`), battery power (`BP`), per-pack SoC (`SC0`–`SC5`), online packs (`ON`), SoC hysteresis (`SI1`/`SA1`) |
 | `heads.<n>.grid.*` | grid power (`GP`), daily charge/feed-in energy (`GD1`/`GD2`) |
 | `heads.<n>.load.*` | load power (`LP`), daily off-grid load energy (`LD`) |
-| `heads.<n>.pv.*` | total PV (`PV`) and per-MPPT power/current/voltage (`mppt1`–`mppt4`) |
+| `heads.<n>.pv.*` | total PV (`PV`), daily PV generation energy (`PD`) and per-MPPT power/current/voltage (`mppt1`–`mppt4`) |
 | `heads.<n>.system.*` | total input/output power (`IW`/`OP`) |
 | `heads.<n>.device.*` | type/model/serial/status; `network.*` (IP, port, Wi-Fi); `firmware.*` (`ES`/`AS`/`DS` software, `EH`/`AH`/`DH` hardware, `BS0`–`BS5` BMS) |
 | `heads.<n>.meter.*` | external meter status (`MS`) |
@@ -159,7 +159,7 @@ By ioBroker convention all writable fields live under each head's `control.*`. B
 
 > Tip: in ioBroker admin you can also filter the object list by the *writable* flag to find all controls at once.
 
-`device.PK` is derived from `DevType` on firmware that no longer reports `PK`. Reserved fields (`PT`, `SI1`, `SA1`) are exposed read-only. Fields the manufacturer dropped (`PD`, `UP`) or that are doc-only artefacts (`WT`, `BN`) are not exposed; anything unmapped is still available in `heads.<n>.info.rawResponse`.
+`device.PK` is derived from `DevType` on firmware that no longer reports `PK`. Reserved fields (`PT`, `SI1`, `SA1`) are exposed read-only. Fields the manufacturer dropped (`UP`) or that are doc-only artefacts (`WT`, `BN`) are not exposed; anything unmapped is still available in `heads.<n>.info.rawResponse`.
 
 ## Manual meter / mode fields (MM / MD)
 
@@ -172,7 +172,8 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 * **Up to three heads per instance.** Single-head operation is validated on real hardware; the multi-head split is covered by unit tests but, at the time of writing, **untested on a real 2–3 head installation** — feedback from multi-head setups is very welcome. *Device self-regulation* is single-head only.
 * **Heads must be on different phases** (operator's responsibility). The adapter regulates the **net summed** grid power, not per phase.
 * Per-pack balancing is handled by each head's own BMS — the adapter steers the head's overall power only and reads `battery.SC` (total) for control; it does not manage individual packs.
-* Daily energy counters (`GD1`/`GD2`/`LD`) are raw **Wh**, not kWh.
+* Daily energy counters (`PD`/`GD1`/`GD2`/`LD`) are raw **Wh**, not kWh. `PD` requires control module firmware `ES 1.1.14` (marketed as "1.1.4" — the public numbering differs from the internal one in `ES`); older firmware simply omits the field and the state stays empty.
+* Daily counters are reset by the device on reboot, so a firmware update mid-day drops them back to 0.
 * `MD` and `TZ` take effect immediately but are not guaranteed to be echoed back verbatim by the device — confirm by effect, not by echo.
 * **PV inputs are untested with hardware** (the reference installation runs without PV modules, so `PV1–4` are always 0). The integration and controller are PV-agnostic and complete, but PV firmware edge cases (e.g. battery full + PV surplus, UPS/bypass fields `FP`/`UG`) are unverified — feedback welcome.
 

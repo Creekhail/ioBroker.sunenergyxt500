@@ -124,7 +124,7 @@ Each head gets its own subtree under **`heads.<n>.*`** (`n` = 1…3), plus combi
 | `heads.<n>.battery.*` | SoC (`SC`), battery power (`BP`), per-pack SoC (`SC0`–`SC5`), online packs (`ON`), SoC hysteresis (`SI1`/`SA1`) |
 | `heads.<n>.grid.*` | grid power (`GP`), daily charge/feed-in energy (`GD1`/`GD2`) |
 | `heads.<n>.load.*` | load power (`LP`), daily off-grid load energy (`LD`) |
-| `heads.<n>.pv.*` | total PV (`PV`) and per-MPPT power/current/voltage (`mppt1`–`mppt4`) |
+| `heads.<n>.pv.*` | total PV (`PV`), daily PV generation energy (`PD`) and per-MPPT power/current/voltage (`mppt1`–`mppt4`) |
 | `heads.<n>.system.*` | total input/output power (`IW`/`OP`) |
 | `heads.<n>.device.*` | type/model/serial/status; `network.*` (IP, port, Wi-Fi); `firmware.*` (`ES`/`AS`/`DS` software, `EH`/`AH`/`DH` hardware, `BS0`–`BS5` BMS) |
 | `heads.<n>.meter.*` | external meter status (`MS`) |
@@ -159,7 +159,7 @@ By ioBroker convention all writable fields live under each head's `control.*`. B
 
 > Tip: in ioBroker admin you can also filter the object list by the *writable* flag to find all controls at once.
 
-`device.PK` is derived from `DevType` on firmware that no longer reports `PK`. Reserved fields (`PT`, `SI1`, `SA1`) are exposed read-only. Fields the manufacturer dropped (`PD`, `UP`) or that are doc-only artefacts (`WT`, `BN`) are not exposed; anything unmapped is still available in `heads.<n>.info.rawResponse`.
+`device.PK` is derived from `DevType` on firmware that no longer reports `PK`. Reserved fields (`PT`, `SI1`, `SA1`) are exposed read-only. Fields the manufacturer dropped (`UP`) or that are doc-only artefacts (`WT`, `BN`) are not exposed; anything unmapped is still available in `heads.<n>.info.rawResponse`.
 
 ## Manual meter / mode fields (MM / MD)
 
@@ -172,7 +172,8 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 * **Up to three heads per instance.** Single-head operation is validated on real hardware; the multi-head split is covered by unit tests but, at the time of writing, **untested on a real 2–3 head installation** — feedback from multi-head setups is very welcome. *Device self-regulation* is single-head only.
 * **Heads must be on different phases** (operator's responsibility). The adapter regulates the **net summed** grid power, not per phase.
 * Per-pack balancing is handled by each head's own BMS — the adapter steers the head's overall power only and reads `battery.SC` (total) for control; it does not manage individual packs.
-* Daily energy counters (`GD1`/`GD2`/`LD`) are raw **Wh**, not kWh.
+* Daily energy counters (`PD`/`GD1`/`GD2`/`LD`) are raw **Wh**, not kWh. `PD` requires control module firmware `ES 1.1.14` (marketed as "1.1.4" — the public numbering differs from the internal one in `ES`); older firmware simply omits the field and the state stays empty.
+* Daily counters are reset by the device on reboot, so a firmware update mid-day drops them back to 0.
 * `MD` and `TZ` take effect immediately but are not guaranteed to be echoed back verbatim by the device — confirm by effect, not by echo.
 * **PV inputs are untested with hardware** (the reference installation runs without PV modules, so `PV1–4` are always 0). The integration and controller are PV-agnostic and complete, but PV firmware edge cases (e.g. battery full + PV surplus, UPS/bypass fields `FP`/`UG`) are unverified — feedback welcome.
 
@@ -192,6 +193,10 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+
+### 0.2.8 (2026-07-29)
+* (Creekhail) Support for control module firmware **`ES 1.1.14`** (marketed by the manufacturer as "1.1.4"): the reinstated field `PD` is now exposed as `heads.<n>.pv.PD` — **today's PV generation energy** in raw Wh. Verified against a 500 PRO before and after the update: no field was removed and no control value was reset, so **older firmware keeps working unchanged** — the state simply stays empty where the device does not deliver `PD`.
+* (Creekhail) Documentation: noted that the device's public firmware numbering differs from the internal one reported in `ES` (public `1.1.4` = internal `1.1.14`) — feature availability is therefore detected by field presence, never by comparing version strings; and that the daily counters (`PD`/`GD1`/`GD2`/`LD`) are reset by the device on reboot, so a firmware update mid-day drops them to 0.
 
 ### 0.2.7 (2026-07-05)
 * (Creekhail) New **adaptive control** (enabled by default): the controller regulates in three manufacturer-proven tiers — small deviations gently (every 7 s, 20 W steps), medium ones every 2.5 s (120 W), large load steps immediately (450 W), with a fixed 5 W dead band. Disable the new checkbox to keep tuning gain, dead band, write interval and step limit manually. **Existing installations are switched to adaptive by this update** (uncheck to return to your manual tuning).

@@ -200,7 +200,19 @@ const measurementDefs = [
     scale: 0.1,
     decimals: 1
   },
-  // Daily energy counters (raw Wh, not kWh!). PD was removed as unsupported in v1.1.0.
+  // Daily energy counters (raw Wh, not kWh!). PD was dropped from the vendor docs
+  // in v1.1.0 and reinstated with control module firmware ES 1.1.14 (marketed as
+  // "1.1.4" — the public numbering differs from the internal one reported in ES).
+  // Never gate on the version string; older firmware simply omits the field and
+  // readAndApplyHead() skips fields that are absent from the payload.
+  {
+    id: "pv.PD",
+    field: "PD",
+    role: "value.energy",
+    unit: "Wh",
+    type: "number",
+    name: { en: "Today's PV generation energy", de: "Heutige PV-Erzeugungsenergie" }
+  },
   {
     // Per the official integration v1.1.0: GD1 = grid charge energy, GD2 = grid
     // feed-in energy (the earlier swap here was based on a faulty source summary).

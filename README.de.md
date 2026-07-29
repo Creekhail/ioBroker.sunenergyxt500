@@ -124,7 +124,7 @@ Jeder Kopf erhält seinen eigenen Teilbaum unter **`heads.<n>.*`** (`n` = 1…3)
 | `heads.<n>.battery.*` | SoC (`SC`), Batterieleistung (`BP`), SoC je Pack (`SC0`–`SC5`), Packs online (`ON`), SoC-Hysterese (`SI1`/`SA1`) |
 | `heads.<n>.grid.*` | Netzleistung (`GP`), Tages-Lade-/Einspeiseenergie (`GD1`/`GD2`) |
 | `heads.<n>.load.*` | Lastleistung (`LP`), Tages-Inselbetriebs-Lastenergie (`LD`) |
-| `heads.<n>.pv.*` | PV gesamt (`PV`) und Leistung/Strom/Spannung je MPPT (`mppt1`–`mppt4`) |
+| `heads.<n>.pv.*` | PV gesamt (`PV`), Tages-PV-Erzeugungsenergie (`PD`) und Leistung/Strom/Spannung je MPPT (`mppt1`–`mppt4`) |
 | `heads.<n>.system.*` | Gesamt-Ein-/Ausgangsleistung (`IW`/`OP`) |
 | `heads.<n>.device.*` | Typ/Modell/Seriennummer/Status; `network.*` (IP, Port, WLAN); `firmware.*` (`ES`/`AS`/`DS` Software, `EH`/`AH`/`DH` Hardware, `BS0`–`BS5` BMS) |
 | `heads.<n>.meter.*` | Status des externen Zählers (`MS`) |
@@ -159,7 +159,7 @@ Per ioBroker-Konvention liegen alle schreibbaren Felder unter dem `control.*` je
 
 > Tipp: Im ioBroker-Admin kannst du die Objektliste auch nach dem *beschreibbar*-Flag filtern, um alle Steuerfelder auf einmal zu finden.
 
-`device.PK` wird aus `DevType` abgeleitet, wenn die Firmware `PK` nicht mehr liefert. Reservierte Felder (`PT`, `SI1`, `SA1`) sind read-only. Vom Hersteller entfernte (`PD`, `UP`) oder reine Doku-Artefakte (`WT`, `BN`) werden nicht angelegt; alles Ungemappte steht weiterhin in `heads.<n>.info.rawResponse`.
+`device.PK` wird aus `DevType` abgeleitet, wenn die Firmware `PK` nicht mehr liefert. Reservierte Felder (`PT`, `SI1`, `SA1`) sind read-only. Vom Hersteller entfernte (`UP`) oder reine Doku-Artefakte (`WT`, `BN`) werden nicht angelegt; alles Ungemappte steht weiterhin in `heads.<n>.info.rawResponse`.
 
 ## Manuelle Zähler-/Modus-Felder (MM / MD)
 
@@ -172,7 +172,8 @@ Die Roh-Felder bleiben für Experten-/Handbetrieb schreibbar (z. B. im *Aus*-Mod
 * **Bis zu drei Köpfe pro Instanz.** Der Einzelkopf-Betrieb ist an echter Hardware validiert; die Mehrkopf-Aufteilung ist durch Unit-Tests abgesichert, zum jetzigen Zeitpunkt aber **an einer echten 2–3-Kopf-Anlage ungetestet** — Rückmeldungen aus Mehrkopf-Setups sind sehr willkommen. *Geräte-Eigenregelung* nur mit Einzelkopf.
 * **Köpfe müssen auf unterschiedlichen Phasen liegen** (Verantwortung des Betreibers). Der Adapter regelt die **Netto-Summen**-Netzleistung, nicht pro Phase.
 * Das Balancing der einzelnen Packs übernimmt das BMS jedes Kopfes — der Adapter steuert nur die Gesamtleistung des Kopfes und nutzt `battery.SC` (gesamt) zur Regelung; einzelne Packs verwaltet er nicht.
-* Tagesenergiezähler (`GD1`/`GD2`/`LD`) sind rohe **Wh**, nicht kWh.
+* Tagesenergiezähler (`PD`/`GD1`/`GD2`/`LD`) sind rohe **Wh**, nicht kWh. `PD` benötigt Steuermodul-Firmware `ES 1.1.14` (öffentlich als „1.1.4" vermarktet — die öffentliche Zählweise weicht von der internen in `ES` ab); ältere Firmware liefert das Feld schlicht nicht, der State bleibt dann leer.
+* Die Tageszähler werden vom Gerät beim Neustart zurückgesetzt — ein Firmwareupdate mitten am Tag setzt sie also auf 0.
 * `MD` und `TZ` wirken sofort, werden vom Gerät aber nicht garantiert wortgleich zurückgemeldet — über die Wirkung bestätigen, nicht über das Echo.
 * **PV-Eingänge sind ungetestet mit Hardware** (die Referenzanlage läuft ohne PV-Module, daher sind `PV1–4` immer 0). Integration und Regler sind PV-agnostisch und vollständig, aber PV-Firmware-Edge-Cases (z. B. Akku voll + PV-Überschuss, USV-/Bypass-Felder `FP`/`UG`) sind unverifiziert — Feedback willkommen.
 

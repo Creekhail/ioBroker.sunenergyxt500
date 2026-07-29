@@ -803,6 +803,17 @@ const NAME_TRANSLATIONS = {
     uk: "\u0421\u0442\u0430\u0442\u0443\u0441 \u0441\u0438\u0441\u0442\u0435\u043C\u0438",
     "zh-cn": "\u7CFB\u7EDF\u72B6\u6001"
   },
+  "Today's PV generation energy": {
+    ru: "\u0421\u0435\u0433\u043E\u0434\u043D\u044F\u0448\u043D\u044F\u044F \u0432\u044B\u0440\u0430\u0431\u043E\u0442\u043A\u0430 \u044D\u043D\u0435\u0440\u0433\u0438\u0438 PV",
+    pt: "Energia de gera\xE7\xE3o fotovoltaica de hoje",
+    nl: "PV-opbrengst van vandaag",
+    fr: "L'\xE9nergie photovolta\xEFque produite aujourd'hui",
+    it: "Energia fotovoltaica prodotta oggi",
+    es: "Energ\xEDa fotovoltaica generada hoy",
+    pl: "Dzisiejsza energia wyprodukowana z PV",
+    uk: "\u0421\u044C\u043E\u0433\u043E\u0434\u043D\u0456\u0448\u043D\u044F \u0432\u0438\u0440\u043E\u0431\u043B\u0435\u043D\u0430 \u0435\u043D\u0435\u0440\u0433\u0456\u044F PV",
+    "zh-cn": "\u4ECA\u65E5\u5149\u4F0F\u53D1\u7535\u91CF"
+  },
   "Today's grid charge energy": {
     ru: "\u0421\u0435\u0433\u043E\u0434\u043D\u044F\u0448\u043D\u044F\u044F \u044D\u043D\u0435\u0440\u0433\u0438\u044F \u0437\u0430\u0440\u044F\u0434\u0430 \u0441\u0435\u0442\u0438",
     pt: "A rede atual carrega energia",

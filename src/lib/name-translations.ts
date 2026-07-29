@@ -786,6 +786,17 @@ export const NAME_TRANSLATIONS: Record<string, Record<string, string>> = {
 		uk: 'Статус системи',
 		'zh-cn': '系统状态',
 	},
+	"Today's PV generation energy": {
+		ru: 'Сегодняшняя выработка энергии PV',
+		pt: 'Energia de geração fotovoltaica de hoje',
+		nl: 'PV-opbrengst van vandaag',
+		fr: "L'énergie photovoltaïque produite aujourd'hui",
+		it: 'Energia fotovoltaica prodotta oggi',
+		es: 'Energía fotovoltaica generada hoy',
+		pl: 'Dzisiejsza energia wyprodukowana z PV',
+		uk: 'Сьогоднішня вироблена енергія PV',
+		'zh-cn': '今日光伏发电量',
+	},
 	"Today's grid charge energy": {
 		ru: 'Сегодняшняя энергия заряда сети',
 		pt: 'A rede atual carrega energia',
