@@ -382,4 +382,57 @@ describe('MultiHeadController', () => {
 		expect(mock.states['controller.status']).to.equal('ok');
 		expect(writes.length).to.equal(1);
 	});
+
+	it('goes to failsafe when the source never delivered a single value', async () => {
+		const heads = [head({ index: 1 })];
+		const { hooks } = mockHooks(heads);
+		const mock = mockAdapter();
+		const ctrl = new MultiHeadController(mock.adapter, hooks, 'x.y.z', cfg({ failsafeSec: 180 }));
+		await ctrl.start();
+		const internal = ctrl as unknown as { startedAt: number; watchdogTick(): Promise<void> };
+
+		// Inside the grace period the loop is simply still waiting — stay quiet.
+		internal.startedAt = Date.now() - 60000;
+		await internal.watchdogTick();
+		expect(mock.states['controller.status']).to.equal('ok');
+
+		internal.startedAt = Date.now() - 200000;
+		await internal.watchdogTick();
+		expect(mock.states['controller.status']).to.equal('failsafe');
+	});
+});
+
+describe('MultiHeadController telemetry', () => {
+	it('mirrors the grid power the way the loop sees it, after inversion', async () => {
+		const heads = [head({ index: 1 })];
+		const { hooks } = mockHooks(heads);
+		const mock = mockAdapter();
+		const ctrl = new MultiHeadController(mock.adapter, hooks, 'x.y.z', cfg({ inverted: true }));
+		await ctrl.start();
+		// Source reports +900 with the opposite convention → really a 900 W export.
+		await ctrl.onGridPower(900);
+		expect(mock.states['controller.gridPower']).to.equal(-900);
+	});
+
+	it('mirrors the grid power even while the dead band suppresses any write', async () => {
+		const heads = [head({ index: 1 })];
+		const { hooks, writes } = mockHooks(heads);
+		const mock = mockAdapter();
+		const ctrl = new MultiHeadController(mock.adapter, hooks, 'x.y.z', cfg({ deadBandW: 100 }));
+		await ctrl.start();
+		writes.length = 0;
+		await ctrl.onGridPower(20);
+		expect(writes).to.deep.equal([]);
+		expect(mock.states['controller.gridPower']).to.equal(20);
+	});
+
+	it('publishes the total setpoint before the split', async () => {
+		const heads = [head({ index: 1 }), head({ index: 2 })];
+		const { hooks } = mockHooks(heads);
+		const mock = mockAdapter();
+		const ctrl = new MultiHeadController(mock.adapter, hooks, 'x.y.z', cfg());
+		await ctrl.start();
+		await ctrl.onGridPower(-1000); // export → charge
+		expect(mock.states['controller.totalTarget']).to.equal(-1000);
+	});
 });

@@ -83,7 +83,12 @@ const AGGREGATE_DEFS: { id: string; role: string; unit?: string; name: Localized
 		id: 'total.gridPower',
 		role: 'value.power',
 		unit: 'W',
-		name: { en: 'Total grid-port power (+feed-in)', de: 'Gesamt-Netzleistung (+Einspeisung)' },
+		// Explicitly "of the storages": this is the sum of the heads' own grid ports, not
+		// the house connection. The controller's view of the latter is controller.gridPower.
+		name: {
+			en: 'Storage grid-port power, total (+feed-in)',
+			de: 'Netzport-Leistung der Speicher, gesamt (+Einspeisung)',
+		},
 	},
 	{
 		id: 'total.maxPower',
@@ -136,6 +141,8 @@ class Sunenergyxt500 extends utils.Adapter {
 	private controller?: MultiHeadController;
 	/** Foreign grid-power source state id the controller subscribes to. */
 	private gridStateId = '';
+	/** Whether the "grid source writes with ack=false" warning was already logged. */
+	private gridAckWarned = false;
 	/** relative control state id (e.g. "control.GS") → its definition */
 	private readonly controlMap = new Map<string, StateDef>();
 	/** Last value confirmed (ack=true) per control state — avoids a DB read per field and poll. */
@@ -686,6 +693,15 @@ class Sunenergyxt500 extends utils.Adapter {
 		if (this.controller && id === this.gridStateId) {
 			if (state.ack) {
 				void this.controller.onGridPower(Number(state.val));
+			} else if (!this.gridAckWarned) {
+				// Silently dropping every value would leave the controller idle at GS=0
+				// with no trace at all — name the state and the fix once.
+				this.gridAckWarned = true;
+				this.log.warn(
+					`Grid source "${id}" is written with ack=false — such values are ignored, so the controller ` +
+						'never regulates. Point it at the sensor state of the meter adapter, or make the writing ' +
+						'script acknowledge its value (setState(id, value, true)).',
+				);
 			}
 			return;
 		}

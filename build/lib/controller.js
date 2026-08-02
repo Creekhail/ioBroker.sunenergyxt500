@@ -44,6 +44,26 @@ const controllerStateDefs = [
     name: { en: "Controller watchdog status (ok/warn/failsafe)", de: "Regler-Watchdog-Status (ok/warn/failsafe)" }
   },
   {
+    id: "controller.gridPower",
+    type: "number",
+    role: "value.power",
+    unit: "W",
+    name: {
+      en: "House grid power as seen by the controller (+draw / \u2212feed-in)",
+      de: "Hausanschluss-Netzleistung wie vom Regler gesehen (+Bezug / \u2212Einspeisung)"
+    }
+  },
+  {
+    id: "controller.totalTarget",
+    type: "number",
+    role: "value.power",
+    unit: "W",
+    name: {
+      en: "Total grid setpoint before the split (+discharge / \u2212charge)",
+      de: "Gesamt-Sollwert vor der Aufteilung (+entladen / \u2212laden)"
+    }
+  },
+  {
     id: "controller.gridSourceAge",
     type: "number",
     role: "value",
@@ -82,8 +102,11 @@ class MultiHeadController {
   warnLogged = false;
   maxGapSec = 0;
   watchdogTimer;
+  /** Start time, used to age out a source that never delivered a single value. */
+  startedAt = 0;
   /** Sets every head to a neutral GS=0 and starts the watchdog. */
   async start() {
+    this.startedAt = Date.now();
     await this.writeAll(0);
     await this.adapter.setStateChangedAsync("controller.status", "ok", true);
     this.adapter.log.info("Multi-head controller started \u2014 all heads GS=0.");
@@ -108,13 +131,15 @@ class MultiHeadController {
     this.everSeenSource = true;
     if (this.failsafeActive || this.warnLogged) {
       if (this.failsafeActive) {
-        this.adapter.log.info("Grid source back \u2014 controller active again.");
+        this.adapter.log.info("Grid source is delivering \u2014 controller active.");
       }
       this.failsafeActive = false;
       this.warnLogged = false;
       await this.adapter.setStateChangedAsync("controller.status", "ok", true);
     }
-    await this.regulate(this.cfg.inverted ? -value : value);
+    const gridPower = this.cfg.inverted ? -value : value;
+    await this.adapter.setStateChangedAsync("controller.gridPower", Math.round(gridPower), true);
+    await this.regulate(gridPower);
   }
   /**
    * Computes the total setpoint, splits it and writes the per-head GS.
@@ -156,6 +181,7 @@ class MultiHeadController {
       const hi = Math.min(base + maxStepW, sumMax);
       totalTarget = Math.round(Math.max(lo, Math.min(hi, totalTarget)));
     }
+    await this.adapter.setStateChangedAsync("controller.totalTarget", totalTarget, true);
     const setpoints = (0, import_split.splitTarget)(totalTarget, heads);
     this.writeInProgress = true;
     try {
@@ -237,8 +263,31 @@ class MultiHeadController {
       }
     }
   }
+  /**
+   * Watchdog branch for a controller that has never received a single value from its
+   * grid source — a wrong state id, or a source written with ack=false (those values
+   * are dropped on purpose). Without this the loop would sit at the GS=0 written by
+   * start() forever while controller mode keeps the device's own regulation switched
+   * off, so the storage neither charges nor discharges and nothing reports a fault.
+   * GS is already 0, so this only makes the state visible.
+   */
+  async reportSourceNeverSeen() {
+    if (this.failsafeActive) {
+      return;
+    }
+    const waitedSec = (Date.now() - this.startedAt) / 1e3;
+    if (waitedSec < this.cfg.failsafeSec) {
+      return;
+    }
+    this.failsafeActive = true;
+    await this.adapter.setStateChangedAsync("controller.status", "failsafe", true);
+    this.adapter.log.warn(
+      `No value has ever arrived from the grid source "${this.gridStateId}" in ${Math.round(waitedSec)} s \u2014 the controller cannot regulate and every head stays at GS=0. Check that the state id exists, that it is being updated, and that it is written with ack=true.`
+    );
+  }
   async watchdogTick() {
     if (!this.everSeenSource) {
+      await this.reportSourceNeverSeen();
       return;
     }
     let ageSec = Infinity;

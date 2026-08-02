@@ -21,6 +21,9 @@
  * otherwise freeze. Two stages:
  *   - from warnSec:     log + telemetry only
  *   - from failsafeSec: GS = 0 on every head (safe neutral) until the source recovers
+ * The same failsafeSec budget applies when no value ever arrived (wrong state id, or
+ * a source writing with ack=false): controller mode has switched the device's own
+ * regulation off, so a silently idle loop means nothing regulates at all.
  */
 
 import type { HeadState } from './split';
@@ -116,6 +119,26 @@ export const controllerStateDefs: {
 		name: { en: 'Controller watchdog status (ok/warn/failsafe)', de: 'Regler-Watchdog-Status (ok/warn/failsafe)' },
 	},
 	{
+		id: 'controller.gridPower',
+		type: 'number',
+		role: 'value.power',
+		unit: 'W',
+		name: {
+			en: 'House grid power as seen by the controller (+draw / −feed-in)',
+			de: 'Hausanschluss-Netzleistung wie vom Regler gesehen (+Bezug / −Einspeisung)',
+		},
+	},
+	{
+		id: 'controller.totalTarget',
+		type: 'number',
+		role: 'value.power',
+		unit: 'W',
+		name: {
+			en: 'Total grid setpoint before the split (+discharge / −charge)',
+			de: 'Gesamt-Sollwert vor der Aufteilung (+entladen / −laden)',
+		},
+	},
+	{
 		id: 'controller.gridSourceAge',
 		type: 'number',
 		role: 'value',
@@ -151,6 +174,8 @@ export class MultiHeadController {
 	private warnLogged = false;
 	private maxGapSec = 0;
 	private watchdogTimer?: ioBroker.Interval;
+	/** Start time, used to age out a source that never delivered a single value. */
+	private startedAt = 0;
 
 	/**
 	 * @param adapter the adapter instance (logging, states, timers)
@@ -167,6 +192,7 @@ export class MultiHeadController {
 
 	/** Sets every head to a neutral GS=0 and starts the watchdog. */
 	public async start(): Promise<void> {
+		this.startedAt = Date.now();
 		await this.writeAll(0);
 		await this.adapter.setStateChangedAsync('controller.status', 'ok', true);
 		this.adapter.log.info('Multi-head controller started — all heads GS=0.');
@@ -193,13 +219,19 @@ export class MultiHeadController {
 		this.everSeenSource = true;
 		if (this.failsafeActive || this.warnLogged) {
 			if (this.failsafeActive) {
-				this.adapter.log.info('Grid source back — controller active again.');
+				this.adapter.log.info('Grid source is delivering — controller active.');
 			}
 			this.failsafeActive = false;
 			this.warnLogged = false;
 			await this.adapter.setStateChangedAsync('controller.status', 'ok', true);
 		}
-		await this.regulate(this.cfg.inverted ? -value : value);
+		const gridPower = this.cfg.inverted ? -value : value;
+		// Diagnostic mirror of the value the loop actually works with (after inversion,
+		// ">0 = draw"). Written for every accepted value — unlike the setpoint states it
+		// therefore also proves that values arrive while the loop sits in its dead band,
+		// and a positive reading during a real house export exposes a wrong `inverted`.
+		await this.adapter.setStateChangedAsync('controller.gridPower', Math.round(gridPower), true);
+		await this.regulate(gridPower);
 	}
 
 	/**
@@ -248,6 +280,9 @@ export class MultiHeadController {
 			const hi = Math.min(base + maxStepW, sumMax);
 			totalTarget = Math.round(Math.max(lo, Math.min(hi, totalTarget)));
 		}
+		// Published before the split so a "controller wants to charge but the heads do
+		// not follow" situation is visible without reading the debug log.
+		await this.adapter.setStateChangedAsync('controller.totalTarget', totalTarget, true);
 		const setpoints = splitTarget(totalTarget, heads);
 
 		this.writeInProgress = true;
@@ -335,8 +370,34 @@ export class MultiHeadController {
 		}
 	}
 
+	/**
+	 * Watchdog branch for a controller that has never received a single value from its
+	 * grid source — a wrong state id, or a source written with ack=false (those values
+	 * are dropped on purpose). Without this the loop would sit at the GS=0 written by
+	 * start() forever while controller mode keeps the device's own regulation switched
+	 * off, so the storage neither charges nor discharges and nothing reports a fault.
+	 * GS is already 0, so this only makes the state visible.
+	 */
+	private async reportSourceNeverSeen(): Promise<void> {
+		if (this.failsafeActive) {
+			return;
+		}
+		const waitedSec = (Date.now() - this.startedAt) / 1000;
+		if (waitedSec < this.cfg.failsafeSec) {
+			return;
+		}
+		this.failsafeActive = true;
+		await this.adapter.setStateChangedAsync('controller.status', 'failsafe', true);
+		this.adapter.log.warn(
+			`No value has ever arrived from the grid source "${this.gridStateId}" in ${Math.round(waitedSec)} s — ` +
+				'the controller cannot regulate and every head stays at GS=0. Check that the state id exists, ' +
+				'that it is being updated, and that it is written with ack=true.',
+		);
+	}
+
 	private async watchdogTick(): Promise<void> {
 		if (!this.everSeenSource) {
+			await this.reportSourceNeverSeen();
 			return;
 		}
 		let ageSec = Infinity;
