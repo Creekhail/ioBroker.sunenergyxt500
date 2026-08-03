@@ -69,6 +69,7 @@
 	"PICUS": "PICUS",
 	"Per-head write dead band (W)": "Strefa martwa zapisu na głowicę (W)",
 	"Poll interval (s)": "Interwał sondowania (s)",
+	"One /read per head and interval; the heads are polled staggered. With two or more heads or a weak Wi-Fi signal (heads.<n>.device.network.WR below -75 dB) use 10-15 s — the controller reacts to the grid-power source, not to this poll, so control quality barely suffers.": "Jedno /read na jednostkę i interwał; jednostki są odpytywane z przesunięciem w czasie. Przy dwóch lub więcej jednostkach albo słabym sygnale Wi-Fi (heads.<n>.device.network.WR poniżej -75 dB) użyj 10-15 s — regulator reaguje na źródło mocy sieciowej, a nie na to odpytywanie, więc jakość regulacji prawie nie ucierpi.",
 	"Q1A": "Pytanie 1A",
 	"Q3A": "Pytanie 3A",
 	"Q3B": "Pytanie 3B",

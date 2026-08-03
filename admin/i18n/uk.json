@@ -69,6 +69,7 @@
 	"PICUS": "ПІКУС",
 	"Per-head write dead band (W)": "Мертва зона запису на голову (Вт)",
 	"Poll interval (s)": "Інтервал опитування (с)",
+	"One /read per head and interval; the heads are polled staggered. With two or more heads or a weak Wi-Fi signal (heads.<n>.device.network.WR below -75 dB) use 10-15 s — the controller reacts to the grid-power source, not to this poll, so control quality barely suffers.": "Один /read на блок за інтервал; блоки опитуються зі зсувом у часі. За двох і більше блоків або слабкого сигналу Wi-Fi (heads.<n>.device.network.WR нижче -75 дБ) використовуйте 10-15 с — регулятор реагує на джерело мережевої потужності, а не на це опитування, тож якість регулювання майже не страждає.",
 	"Q1A": "Q1A",
 	"Q3A": "Q3A",
 	"Q3B": "Q3B",

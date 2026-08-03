@@ -25,6 +25,7 @@ var utils = __toESM(require("@iobroker/adapter-core"));
 var import_api = require("./lib/api");
 var import_controller = require("./lib/controller");
 var import_name_translations = require("./lib/name-translations");
+var import_poll_schedule = require("./lib/poll-schedule");
 var import_states = require("./lib/states");
 const WRITE_CONFIRM_DELAY_MS = 1500;
 const MAX_HEADS = 3;
@@ -96,7 +97,8 @@ class Sunenergyxt500 extends utils.Adapter {
   meterMd = "";
   /** Per-head flag whether the MM-mismatch warning was already logged. */
   mmGuardWarned = /* @__PURE__ */ new Map();
-  pollTimer;
+  /** One poll timer per head index — the heads run on independent, staggered cycles. */
+  pollTimers = /* @__PURE__ */ new Map();
   /** Active multi-head controller (controller mode only). */
   controller;
   /** Foreign grid-power source state id the controller subscribes to. */
@@ -151,7 +153,8 @@ class Sunenergyxt500 extends utils.Adapter {
         api: new import_api.SunEnergyXtApi(host, timeoutMs),
         online: false,
         packs: 1,
-        maxPower: 2400
+        maxPower: 2400,
+        pollFailures: 0
       });
     }
     if (!this.heads.length) {
@@ -189,9 +192,9 @@ class Sunenergyxt500 extends utils.Adapter {
       await this.setupController();
     }
     this.log.info(
-      `Control mode: ${this.controlMode}. Polling ${this.heads.length} head(s) every ${this.pollIntervalMs / 1e3}s.`
+      `Control mode: ${this.controlMode}. Polling ${this.heads.length} head(s) every ${this.pollIntervalMs / 1e3}s${this.heads.length > 1 ? ", staggered" : ""}.`
     );
-    void this.pollLoop();
+    this.startPolling();
   }
   /**
    * Creates all per-head, aggregate, controller and info objects for the current
@@ -374,15 +377,50 @@ class Sunenergyxt500 extends utils.Adapter {
     }
     this.log.info(`Cleaned up ${toDelete.length} obsolete object(s).`);
   }
-  async pollLoop() {
-    await Promise.all(this.heads.map((h) => this.readAndApplyHead(h)));
+  /**
+   * Starts one independent poll cycle per head, staggered so the heads do not
+   * transmit at the same instant. Independent cycles (instead of one loop over all
+   * heads) keep a slow or unreachable head from delaying the others, which a plain
+   * sequential loop would do.
+   */
+  startPolling() {
+    for (const h of this.heads) {
+      this.schedulePoll(h, (0, import_poll_schedule.pollStaggerMs)(h.index, this.heads.length, this.pollIntervalMs));
+    }
+  }
+  /**
+   * Schedules this head's next poll, replacing any pending timer for it.
+   *
+   * @param h the head to schedule
+   * @param delayMs delay until the next poll
+   */
+  schedulePoll(h, delayMs) {
+    const pending = this.pollTimers.get(h.index);
+    if (pending) {
+      this.clearTimeout(pending);
+    }
+    const timer = this.setTimeout(() => void this.pollHead(h), delayMs);
+    if (timer) {
+      this.pollTimers.set(h.index, timer);
+    }
+  }
+  /**
+   * Polls one head and reschedules its own cycle.
+   *
+   * @param h the head to poll
+   */
+  async pollHead(h) {
+    this.pollTimers.delete(h.index);
+    const ok = await this.readAndApplyHead(h);
+    h.pollFailures = ok ? 0 : h.pollFailures + 1;
     await this.computeAggregates();
-    this.pollTimer = this.setTimeout(() => void this.pollLoop(), this.pollIntervalMs);
+    this.schedulePoll(h, (0, import_poll_schedule.pollBackoffMs)(this.pollIntervalMs, h.pollFailures));
   }
   /**
    * Reads one head once and mirrors its fields to heads.<n>.* (without rescheduling).
    *
    * @param h the head to poll
+   * @returns whether the read succeeded
    */
   async readAndApplyHead(h) {
     var _a, _b, _c, _d, _e, _f, _g;
@@ -437,6 +475,7 @@ class Sunenergyxt500 extends utils.Adapter {
         await this.setState(`${base}.info.online`, true, true);
       }
       await this.setStateChangedAsync(`${base}.info.lastError`, "", true);
+      return true;
     } catch (e) {
       if (h.online || h.soc === void 0) {
         h.online = false;
@@ -445,6 +484,7 @@ class Sunenergyxt500 extends utils.Adapter {
       }
       await this.setStateChangedAsync(`${base}.info.lastError`, errMsg(e), true);
       this.log.warn(`Head ${h.index} (${h.host}) poll failed: ${errMsg(e)}`);
+      return false;
     }
   }
   /** Computes the combined view across all online heads. */
@@ -685,14 +725,17 @@ class Sunenergyxt500 extends utils.Adapter {
       if (!host) {
         continue;
       }
+      const api = new import_api.SunEnergyXtApi(host, timeoutMs);
       try {
-        const { reported } = await new import_api.SunEnergyXtApi(host, timeoutMs).read();
+        const { reported } = await api.read();
         const model = asString(reported.DevType) || "SunEnergyXT";
         const soc = num(reported.SC);
         lines.push(`\u2022 ${name} (${host}): OK \u2014 ${model}${soc !== void 0 ? `, SoC ${soc}%` : ""}`);
       } catch (e) {
         failures++;
         lines.push(`\u2022 ${name} (${host}): unreachable \u2014 ${errMsg(e)}`);
+      } finally {
+        api.destroy();
       }
     }
     const text = lines.length ? lines.join("\n") : "No head configured to test.";
@@ -704,9 +747,10 @@ class Sunenergyxt500 extends utils.Adapter {
   onUnload(callback) {
     void (async () => {
       try {
-        if (this.pollTimer) {
-          this.clearTimeout(this.pollTimer);
+        for (const timer of this.pollTimers.values()) {
+          this.clearTimeout(timer);
         }
+        this.pollTimers.clear();
         if (this.controller) {
           this.controller.stop();
           await Promise.race([
@@ -716,6 +760,9 @@ class Sunenergyxt500 extends utils.Adapter {
         }
       } catch {
       } finally {
+        for (const h of this.heads) {
+          h.api.destroy();
+        }
         callback();
       }
     })();

@@ -16,6 +16,7 @@ import { SunEnergyXtApi } from './lib/api';
 import type { ControllerConfig, ControllerHooks } from './lib/controller';
 import { controllerStateDefs, MultiHeadController } from './lib/controller';
 import { NAME_TRANSLATIONS } from './lib/name-translations';
+import { pollBackoffMs, pollStaggerMs } from './lib/poll-schedule';
 import type { HeadState } from './lib/split';
 import type { LocalizedName, StateDef } from './lib/states';
 import { applyMeterModeCoupling, buildMeterMd, cfgNum, controlDefs, measurementDefs, roundTo } from './lib/states';
@@ -125,6 +126,8 @@ interface HeadRuntime {
 	maxPower: number;
 	socMin?: number;
 	socMax?: number;
+	/** Consecutive failed polls; drives the back-off in nextPollDelay(). */
+	pollFailures: number;
 }
 
 class Sunenergyxt500 extends utils.Adapter {
@@ -136,7 +139,8 @@ class Sunenergyxt500 extends utils.Adapter {
 	private meterMd = '';
 	/** Per-head flag whether the MM-mismatch warning was already logged. */
 	private readonly mmGuardWarned = new Map<number, boolean>();
-	private pollTimer?: ioBroker.Timeout;
+	/** One poll timer per head index — the heads run on independent, staggered cycles. */
+	private readonly pollTimers = new Map<number, ioBroker.Timeout>();
 	/** Active multi-head controller (controller mode only). */
 	private controller?: MultiHeadController;
 	/** Foreign grid-power source state id the controller subscribes to. */
@@ -196,6 +200,7 @@ class Sunenergyxt500 extends utils.Adapter {
 				online: false,
 				packs: 1,
 				maxPower: 2400,
+				pollFailures: 0,
 			});
 		}
 
@@ -242,9 +247,10 @@ class Sunenergyxt500 extends utils.Adapter {
 		}
 
 		this.log.info(
-			`Control mode: ${this.controlMode}. Polling ${this.heads.length} head(s) every ${this.pollIntervalMs / 1000}s.`,
+			`Control mode: ${this.controlMode}. Polling ${this.heads.length} head(s) every ${this.pollIntervalMs / 1000}s` +
+				`${this.heads.length > 1 ? ', staggered' : ''}.`,
 		);
-		void this.pollLoop();
+		this.startPolling();
 	}
 
 	/**
@@ -449,20 +455,57 @@ class Sunenergyxt500 extends utils.Adapter {
 		this.log.info(`Cleaned up ${toDelete.length} obsolete object(s).`);
 	}
 
-	private async pollLoop(): Promise<void> {
-		// Poll all heads in parallel so one slow/unreachable head (timeout) does not
-		// stretch the whole cycle; readAndApplyHead isolates its errors per head.
-		await Promise.all(this.heads.map(h => this.readAndApplyHead(h)));
+	/**
+	 * Starts one independent poll cycle per head, staggered so the heads do not
+	 * transmit at the same instant. Independent cycles (instead of one loop over all
+	 * heads) keep a slow or unreachable head from delaying the others, which a plain
+	 * sequential loop would do.
+	 */
+	private startPolling(): void {
+		for (const h of this.heads) {
+			this.schedulePoll(h, pollStaggerMs(h.index, this.heads.length, this.pollIntervalMs));
+		}
+	}
+
+	/**
+	 * Schedules this head's next poll, replacing any pending timer for it.
+	 *
+	 * @param h the head to schedule
+	 * @param delayMs delay until the next poll
+	 */
+	private schedulePoll(h: HeadRuntime, delayMs: number): void {
+		const pending = this.pollTimers.get(h.index);
+		if (pending) {
+			this.clearTimeout(pending);
+			this.pollTimers.delete(h.index);
+		}
+		// Returns undefined once the adapter is unloading — then there is nothing to track.
+		const timer = this.setTimeout(() => void this.pollHead(h), delayMs);
+		if (timer) {
+			this.pollTimers.set(h.index, timer);
+		}
+	}
+
+	/**
+	 * Polls one head and reschedules its own cycle.
+	 *
+	 * @param h the head to poll
+	 */
+	private async pollHead(h: HeadRuntime): Promise<void> {
+		this.pollTimers.delete(h.index);
+		const ok = await this.readAndApplyHead(h);
+		h.pollFailures = ok ? 0 : h.pollFailures + 1;
 		await this.computeAggregates();
-		this.pollTimer = this.setTimeout(() => void this.pollLoop(), this.pollIntervalMs);
+		this.schedulePoll(h, pollBackoffMs(this.pollIntervalMs, h.pollFailures));
 	}
 
 	/**
 	 * Reads one head once and mirrors its fields to heads.<n>.* (without rescheduling).
 	 *
 	 * @param h the head to poll
+	 * @returns whether the read succeeded
 	 */
-	private async readAndApplyHead(h: HeadRuntime): Promise<void> {
+	private async readAndApplyHead(h: HeadRuntime): Promise<boolean> {
 		const base = `heads.${h.index}`;
 		try {
 			const { reported: data, body } = await h.api.read();
@@ -523,6 +566,7 @@ class Sunenergyxt500 extends utils.Adapter {
 				await this.setState(`${base}.info.online`, true, true);
 			}
 			await this.setStateChangedAsync(`${base}.info.lastError`, '', true);
+			return true;
 		} catch (e) {
 			if (h.online || h.soc === undefined) {
 				h.online = false;
@@ -532,6 +576,7 @@ class Sunenergyxt500 extends utils.Adapter {
 			}
 			await this.setStateChangedAsync(`${base}.info.lastError`, errMsg(e), true);
 			this.log.warn(`Head ${h.index} (${h.host}) poll failed: ${errMsg(e)}`);
+			return false;
 		}
 	}
 
@@ -793,14 +838,17 @@ class Sunenergyxt500 extends utils.Adapter {
 			if (!host) {
 				continue; // empty optional slot
 			}
+			const api = new SunEnergyXtApi(host, timeoutMs);
 			try {
-				const { reported } = await new SunEnergyXtApi(host, timeoutMs).read();
+				const { reported } = await api.read();
 				const model = asString(reported.DevType) || 'SunEnergyXT';
 				const soc = num(reported.SC);
 				lines.push(`• ${name} (${host}): OK — ${model}${soc !== undefined ? `, SoC ${soc}%` : ''}`);
 			} catch (e) {
 				failures++;
 				lines.push(`• ${name} (${host}): unreachable — ${errMsg(e)}`);
+			} finally {
+				api.destroy();
 			}
 		}
 		const text = lines.length ? lines.join('\n') : 'No head configured to test.';
@@ -814,9 +862,10 @@ class Sunenergyxt500 extends utils.Adapter {
 	private onUnload(callback: () => void): void {
 		void (async () => {
 			try {
-				if (this.pollTimer) {
-					this.clearTimeout(this.pollTimer);
+				for (const timer of this.pollTimers.values()) {
+					this.clearTimeout(timer);
 				}
+				this.pollTimers.clear();
 				if (this.controller) {
 					this.controller.stop();
 					// Leaving controller mode (stop/restart/mode change): without this the
@@ -830,6 +879,11 @@ class Sunenergyxt500 extends utils.Adapter {
 			} catch {
 				// ignore — we must always call the callback
 			} finally {
+				// Leave no socket behind on the heads: their ESP32 has a very small
+				// socket table and would only reclaim ours after its own timeout.
+				for (const h of this.heads) {
+					h.api.destroy();
+				}
 				callback();
 			}
 		})();

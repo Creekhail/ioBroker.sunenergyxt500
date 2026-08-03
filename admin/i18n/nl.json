@@ -69,6 +69,7 @@
 	"PICUS": "PICUS",
 	"Per-head write dead band (W)": "Per-head schrijf dode band (W)",
 	"Poll interval (s)": "Poll-interval (s)",
+	"One /read per head and interval; the heads are polled staggered. With two or more heads or a weak Wi-Fi signal (heads.<n>.device.network.WR below -75 dB) use 10-15 s — the controller reacts to the grid-power source, not to this poll, so control quality barely suffers.": "Eén /read per unit en interval; de units worden gespreid opgevraagd. Bij twee of meer units of een zwak wifi-signaal (heads.<n>.device.network.WR onder -75 dB) 10-15 s gebruiken — de regelaar reageert op de netvermogensbron, niet op deze opvraging, dus de regelkwaliteit lijdt er nauwelijks onder.",
 	"Q1A": "Vraag 1A",
 	"Q3A": "Vraag 3A",
 	"Q3B": "Q3B",

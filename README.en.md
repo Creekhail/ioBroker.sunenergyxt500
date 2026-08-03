@@ -187,6 +187,7 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 * **Two controllers fight over the battery:** run only one. The adapter enforces `MM` for the selected mode — disable any external `GS` script (or a device's own `MM` with a different meter) before using a control mode.
 * **Some states stay empty (`0` / `""`):** a device only returns the fields its firmware/topology actually provides (e.g. extra packs `SC2`–`SC5`, or fault bitmasks only during a fault). The complete raw response is always available in `heads.<n>.info.rawResponse`.
 * **After updating from a single-head version the tree looks wrong:** the object tree was restructured to `heads.<n>.*` in 0.2.0. The adapter removes obsolete objects automatically on start; if anything lingers, delete the old objects (or re-add the instance).
+* **Heads drop out sporadically / ping timeouts:** the head's Wi-Fi module is weak, and stacking the units puts a metal case right over the antenna. Check `heads.<n>.device.network.WR` (signal strength in dB) — below −75 dB the link becomes unreliable. Separate stacked units and raise the **poll interval** to 10–15 s (control quality barely suffers: the controller reacts to the grid-power source, not to this poll). To rule the adapter out, stop the instance and ping the head for a few minutes — if the drop-outs continue, polling is not the cause. The adapter itself sends one `/read` per head and interval, staggers multiple heads, closes every connection after use and backs off automatically after failed polls.
 
 ## Changelog
 

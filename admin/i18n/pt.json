@@ -69,6 +69,7 @@
 	"PICUS": "PICO",
 	"Per-head write dead band (W)": "Banda morta de gravação por cabeça (W)",
 	"Poll interval (s)": "Intervalo(s) de pesquisa",
+	"One /read per head and interval; the heads are polled staggered. With two or more heads or a weak Wi-Fi signal (heads.<n>.device.network.WR below -75 dB) use 10-15 s — the controller reacts to the grid-power source, not to this poll, so control quality barely suffers.": "Um /read por unidade e intervalo; as unidades são consultadas de forma escalonada. Com duas ou mais unidades ou um sinal Wi-Fi fraco (heads.<n>.device.network.WR abaixo de -75 dB), use 10-15 s — o controlador reage à fonte de potência da rede, não a esta consulta, pelo que a qualidade da regulação quase não é afetada.",
 	"Q1A": "Q1A",
 	"Q3A": "Q3A",
 	"Q3B": "Q3B",

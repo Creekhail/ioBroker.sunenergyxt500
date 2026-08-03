@@ -43,8 +43,24 @@ class SunEnergyXtApi {
     this.timeoutMs = timeoutMs;
     const trimmed = (host || "").trim().replace(/\/+$/, "");
     this.baseUrl = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+    this.agent = new http.Agent({ keepAlive: false, maxSockets: 1 });
   }
   baseUrl;
+  /**
+   * A dedicated connection pool per head instead of Node's global agent:
+   *
+   * - `keepAlive: false` makes every request send `Connection: close` and tears the
+   *   socket down afterwards. The global agent keeps a socket open for 5 s, which at
+   *   a 5 s poll means permanently — and the ESP32 in the head has a very small
+   *   socket table it cannot reclaim if the close is lost on a weak Wi-Fi link.
+   * - `maxSockets: 1` serializes this head's requests: a control write is queued
+   *   behind a running poll instead of opening a second parallel connection.
+   */
+  agent;
+  /** Closes all sockets of this head's pool (adapter unload). */
+  destroy() {
+    this.agent.destroy();
+  }
   /** Reads the current device snapshot (decoded `state.reported`) plus the original body. */
   async read() {
     var _a;
@@ -71,18 +87,33 @@ class SunEnergyXtApi {
   request(method, path, payload) {
     return new Promise((resolve, reject) => {
       const url = new import_node_url.URL(path, this.baseUrl);
-      const headers = {};
+      const headers = { Connection: "close" };
       if (payload !== void 0) {
         headers["Content-Type"] = "application/json";
         headers["Content-Length"] = Buffer.byteLength(payload);
       }
+      let settled = false;
+      const pending = {};
+      const settle = (err, data) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(pending.deadline);
+        if (err) {
+          reject(err);
+        } else {
+          resolve(data != null ? data : "");
+        }
+      };
       const req = http.request(
         {
           hostname: url.hostname,
           port: url.port || 80,
           path: url.pathname + url.search,
           method,
-          headers
+          headers,
+          agent: this.agent
         },
         (res) => {
           let data = "";
@@ -96,17 +127,16 @@ class SunEnergyXtApi {
             var _a;
             const status = (_a = res.statusCode) != null ? _a : 0;
             if (status < 200 || status >= 300) {
-              reject(new Error(`HTTP ${status}`));
+              settle(new Error(`HTTP ${status}`));
               return;
             }
-            resolve(data);
+            settle(void 0, data);
           });
         }
       );
-      req.setTimeout(this.timeoutMs, () => {
-        req.destroy(new Error("Timeout"));
-      });
-      req.on("error", reject);
+      pending.deadline = setTimeout(() => req.destroy(new Error("Timeout")), this.timeoutMs);
+      pending.deadline.unref();
+      req.on("error", (e) => settle(e));
       if (payload !== void 0) {
         req.write(payload);
       }

@@ -69,6 +69,7 @@
 	"PICUS": "PICUS",
 	"Per-head write dead band (W)": "每头写入死区 (W)",
 	"Poll interval (s)": "轮询间隔（秒）",
+	"One /read per head and interval; the heads are polled staggered. With two or more heads or a weak Wi-Fi signal (heads.<n>.device.network.WR below -75 dB) use 10-15 s — the controller reacts to the grid-power source, not to this poll, so control quality barely suffers.": "每个机组每个间隔发送一次 /read；各机组错开轮询。若有两个及以上机组，或 Wi-Fi 信号较弱（heads.<n>.device.network.WR 低于 -75 dB），请使用 10-15 秒——调节器响应的是电网功率源而非本轮询，因此调节质量几乎不受影响。",
 	"Q1A": "Q1A",
 	"Q3A": "Q3A",
 	"Q3B": "Q3B",

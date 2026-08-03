@@ -188,12 +188,19 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 * **Two controllers fight over the battery:** run only one. The adapter enforces `MM` for the selected mode — disable any external `GS` script (or a device's own `MM` with a different meter) before using a control mode.
 * **Some states stay empty (`0` / `""`):** a device only returns the fields its firmware/topology actually provides (e.g. extra packs `SC2`–`SC5`, or fault bitmasks only during a fault). The complete raw response is always available in `heads.<n>.info.rawResponse`.
 * **After updating from a single-head version the tree looks wrong:** the object tree was restructured to `heads.<n>.*` in 0.2.0. The adapter removes obsolete objects automatically on start; if anything lingers, delete the old objects (or re-add the instance).
+* **Heads drop out sporadically / ping timeouts:** the head's Wi-Fi module is weak, and stacking the units puts a metal case right over the antenna. Check `heads.<n>.device.network.WR` (signal strength in dB) — below −75 dB the link becomes unreliable. Separate stacked units and raise the **poll interval** to 10–15 s (control quality barely suffers: the controller reacts to the grid-power source, not to this poll). To rule the adapter out, stop the instance and ping the head for a few minutes — if the drop-outs continue, polling is not the cause. The adapter itself sends one `/read` per head and interval, staggers multiple heads, closes every connection after use and backs off automatically after failed polls.
 
 ## Changelog
 <!--
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### 0.2.10 (2026-08-03)
+* (Creekhail) **Gentler on the heads' Wi-Fi:** with two or three heads the adapter no longer polls them all in the same instant — each head now runs its own cycle, staggered by up to 1 s. After a failed poll that head is backed off (doubling up to 60 s) instead of being polled at full rate, which only added to the congestion that made it drop out. The other heads keep their own rhythm either way.
+* (Creekhail) **Every HTTP connection is closed after use** (`Connection: close`, a dedicated connection pool per head). Node's default keeps a socket open for 5 s, which at a 5 s poll means permanently — a slot the head's ESP32 cannot reclaim if the close is lost on a weak link. Reads and writes to the same head are now serialized as well, so a control write no longer opens a second parallel connection while a poll is running, and all sockets are closed on unload.
+* (Creekhail) The **request timeout now covers the whole request** instead of only the phase after a socket was assigned.
+* (Creekhail) Admin: the poll interval carries a help text recommending 10–15 s for two or more heads or a weak Wi-Fi signal; new troubleshooting entry for sporadic head drop-outs.
+
 ### 0.2.9 (2026-08-02)
 * (Creekhail) The controller now publishes what it actually sees: **`controller.gridPower`** is the house grid power the way the loop understands it (after the *inverted* option, `>0` = draw) and is updated for every accepted value — even while the dead band suppresses any write, so "no value arrives" and "values arrive but nothing happens" are finally distinguishable. **`controller.totalTarget`** shows the total setpoint before it is split across the heads; a negative value means the controller wants to charge, so a storage that stays idle anyway is a device-side problem.
 * (Creekhail) **Fixed a silent standstill:** if the configured grid-power source never delivered a single value (wrong state id, or a state written with `ack=false`), the controller sat at `GS=0` forever without any warning — while control mode had already switched the device's own regulation (`MM`) off. Nothing regulated at all, and the status still read `ok`. The watchdog now escalates to `failsafe` after the configured failsafe time and logs the state id together with what to check.
