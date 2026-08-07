@@ -28,6 +28,18 @@ export interface DeviceRead {
 	body: string;
 }
 
+/**
+ * The slice of the adapter this client needs: its timer functions. ioBroker tracks
+ * timers created this way and clears them on unload, so a request deadline can never
+ * outlive the adapter instance (plain setTimeout would — see check S5005).
+ */
+export interface TimerHost {
+	/** Starts an adapter-managed timeout. */
+	setTimeout(cb: () => void, ms: number): ioBroker.Timeout | undefined;
+	/** Cancels a timer returned by {@link TimerHost.setTimeout}. */
+	clearTimeout(timer: ioBroker.Timeout | undefined): void;
+}
+
 /** Envelope structure of a /read response. */
 type ReadEnvelope = {
 	/** Device-shadow container. */
@@ -55,10 +67,12 @@ export class SunEnergyXtApi {
 	/**
 	 * @param host - device IP or hostname (with or without scheme)
 	 * @param timeoutMs - request timeout in milliseconds
+	 * @param timers - adapter instance supplying the managed timer functions
 	 */
 	public constructor(
 		host: string,
 		private readonly timeoutMs: number,
+		private readonly timers: TimerHost,
 	) {
 		const trimmed = (host || '').trim().replace(/\/+$/, '');
 		this.baseUrl = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
@@ -108,13 +122,13 @@ export class SunEnergyXtApi {
 			let settled = false;
 			// Holder so settle() can clear a timer that is only armed further below
 			// (it needs the request object, which does not exist yet).
-			const pending: { deadline?: NodeJS.Timeout } = {};
+			const pending: { deadline?: ioBroker.Timeout } = {};
 			const settle = (err?: Error, data?: string): void => {
 				if (settled) {
 					return;
 				}
 				settled = true;
-				clearTimeout(pending.deadline);
+				this.timers.clearTimeout(pending.deadline);
 				if (err) {
 					reject(err);
 				} else {
@@ -151,8 +165,7 @@ export class SunEnergyXtApi {
 			// One deadline for the whole request rather than req.setTimeout(), which only
 			// starts once a socket is assigned: with maxSockets 1 a request can also spend
 			// time queued behind a stuck one, and that wait must count against the timeout.
-			pending.deadline = setTimeout(() => req.destroy(new Error('Timeout')), this.timeoutMs);
-			pending.deadline.unref();
+			pending.deadline = this.timers.setTimeout(() => req.destroy(new Error('Timeout')), this.timeoutMs);
 			req.on('error', e => settle(e));
 			if (payload !== undefined) {
 				req.write(payload);

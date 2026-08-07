@@ -196,7 +196,7 @@ class Sunenergyxt500 extends utils.Adapter {
 				index: this.heads.length + 1,
 				host,
 				label: (c.label || '').trim(),
-				api: new SunEnergyXtApi(host, timeoutMs),
+				api: new SunEnergyXtApi(host, timeoutMs, this),
 				online: false,
 				packs: 1,
 				maxPower: 2400,
@@ -838,7 +838,7 @@ class Sunenergyxt500 extends utils.Adapter {
 			if (!host) {
 				continue; // empty optional slot
 			}
-			const api = new SunEnergyXtApi(host, timeoutMs);
+			const api = new SunEnergyXtApi(host, timeoutMs, this);
 			try {
 				const { reported } = await api.read();
 				const model = asString(reported.DevType) || 'SunEnergyXT';

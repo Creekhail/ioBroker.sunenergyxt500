@@ -150,7 +150,7 @@ class Sunenergyxt500 extends utils.Adapter {
         index: this.heads.length + 1,
         host,
         label: (c.label || "").trim(),
-        api: new import_api.SunEnergyXtApi(host, timeoutMs),
+        api: new import_api.SunEnergyXtApi(host, timeoutMs, this),
         online: false,
         packs: 1,
         maxPower: 2400,
@@ -398,6 +398,7 @@ class Sunenergyxt500 extends utils.Adapter {
     const pending = this.pollTimers.get(h.index);
     if (pending) {
       this.clearTimeout(pending);
+      this.pollTimers.delete(h.index);
     }
     const timer = this.setTimeout(() => void this.pollHead(h), delayMs);
     if (timer) {
@@ -725,7 +726,7 @@ class Sunenergyxt500 extends utils.Adapter {
       if (!host) {
         continue;
       }
-      const api = new import_api.SunEnergyXtApi(host, timeoutMs);
+      const api = new import_api.SunEnergyXtApi(host, timeoutMs, this);
       try {
         const { reported } = await api.read();
         const model = asString(reported.DevType) || "SunEnergyXT";

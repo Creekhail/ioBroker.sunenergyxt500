@@ -38,9 +38,11 @@ class SunEnergyXtApi {
   /**
    * @param host - device IP or hostname (with or without scheme)
    * @param timeoutMs - request timeout in milliseconds
+   * @param timers - adapter instance supplying the managed timer functions
    */
-  constructor(host, timeoutMs) {
+  constructor(host, timeoutMs, timers) {
     this.timeoutMs = timeoutMs;
+    this.timers = timers;
     const trimmed = (host || "").trim().replace(/\/+$/, "");
     this.baseUrl = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
     this.agent = new http.Agent({ keepAlive: false, maxSockets: 1 });
@@ -99,7 +101,7 @@ class SunEnergyXtApi {
           return;
         }
         settled = true;
-        clearTimeout(pending.deadline);
+        this.timers.clearTimeout(pending.deadline);
         if (err) {
           reject(err);
         } else {
@@ -134,8 +136,7 @@ class SunEnergyXtApi {
           });
         }
       );
-      pending.deadline = setTimeout(() => req.destroy(new Error("Timeout")), this.timeoutMs);
-      pending.deadline.unref();
+      pending.deadline = this.timers.setTimeout(() => req.destroy(new Error("Timeout")), this.timeoutMs);
       req.on("error", (e) => settle(e));
       if (payload !== void 0) {
         req.write(payload);
