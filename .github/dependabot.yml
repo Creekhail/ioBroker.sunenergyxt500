@@ -18,6 +18,11 @@ updates:
       # Keep @types/node aligned with the supported Node.js runtime; do not bump majors automatically.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # @iobroker/eslint-config pulls @typescript-eslint 8.x, whose peer range caps at
+      # typescript < 6.1. A major bump therefore breaks `npm ci` outright. Revisit once
+      # the ioBroker lint config moves to @typescript-eslint 9.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
