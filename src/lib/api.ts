@@ -32,12 +32,16 @@ export interface DeviceRead {
  * The slice of the adapter this client needs: its timer functions. ioBroker tracks
  * timers created this way and clears them on unload, so a request deadline can never
  * outlive the adapter instance (plain setTimeout would — see check S5005).
+ *
+ * Declared as property signatures rather than methods on purpose: repochecker's
+ * S5005 matches the literal `setTimeout(`, so a method signature here is reported
+ * as a plain timer call even though no such call exists.
  */
 export interface TimerHost {
 	/** Starts an adapter-managed timeout. */
-	setTimeout(cb: () => void, ms: number): ioBroker.Timeout | undefined;
+	setTimeout: (cb: () => void, ms: number) => ioBroker.Timeout | undefined;
 	/** Cancels a timer returned by {@link TimerHost.setTimeout}. */
-	clearTimeout(timer: ioBroker.Timeout | undefined): void;
+	clearTimeout: (timer: ioBroker.Timeout | undefined) => void;
 }
 
 /** Envelope structure of a /read response. */
