@@ -162,7 +162,8 @@
 			{
 				"admin": ">=7.8.23"
 			}
-		]
+		],
+		"stopTimeout": 5000
 	},
 	"native": {
 		"head1Host": "",
@@ -183,6 +184,9 @@
 		"controllerMaxStepW": 500,
 		"controllerMinIntervalMs": 5000,
 		"controllerWriteDeadBandW": 10,
+		"controllerMeterStabilizationMs": 0,
+		"controllerControlIs": false,
+		"controllerIsWriteDeadBandW": 10,
 		"watchdogWarnSec": 30,
 		"watchdogFailsafeSec": 180,
 		"meterType": "shellypro3em",

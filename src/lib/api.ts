@@ -44,15 +44,6 @@ export interface TimerHost {
 	clearTimeout: (timer: ioBroker.Timeout | undefined) => void;
 }
 
-/** Envelope structure of a /read response. */
-type ReadEnvelope = {
-	/** Device-shadow container. */
-	state?: {
-		/** The reported snapshot inside the shadow. */
-		reported?: ReportedState;
-	};
-};
-
 /** Minimal HTTP client for one head's local API (/read and /write). */
 export class SunEnergyXtApi {
 	private readonly baseUrl: string;
@@ -91,16 +82,25 @@ export class SunEnergyXtApi {
 	/** Reads the current device snapshot (decoded `state.reported`) plus the original body. */
 	public async read(): Promise<DeviceRead> {
 		const body = await this.request('GET', '/read');
-		const parsed = JSON.parse(body) as ReadEnvelope;
-		const reported = parsed?.state?.reported;
-		if (reported && typeof reported === 'object') {
-			return { reported, body };
+		const parsed: unknown = JSON.parse(body);
+		if (!isPlainObject(parsed)) {
+			// Arrays and primitives are not snapshots. Accepting them would make a head
+			// look online with every field missing, which downstream defaults then turn
+			// into plausible-looking zeros.
+			throw new Error('Unexpected /read response structure');
 		}
-		// Some firmware branches may return the snapshot directly
-		if (parsed && typeof parsed === 'object') {
-			return { reported: parsed, body };
+		if ('state' in parsed) {
+			// Envelope shape: then the payload has to be inside it. Falling back to the
+			// envelope itself would hand the caller a snapshot with no fields at all.
+			const state = (parsed as { state?: unknown }).state;
+			const reported = isPlainObject(state) ? (state as { reported?: unknown }).reported : undefined;
+			if (!isPlainObject(reported)) {
+				throw new Error('Unexpected /read response structure');
+			}
+			return { reported: reported, body };
 		}
-		throw new Error('Unexpected /read response structure');
+		// Some firmware branches may return the snapshot directly.
+		return { reported: parsed, body };
 	}
 
 	/**
@@ -108,12 +108,41 @@ export class SunEnergyXtApi {
 	 * Resolves on HTTP 2xx; the caller must confirm the effect via read().
 	 *
 	 * @param fields - map of API field name to value
+	 * @param timeoutMs - deadline for this write; defaults to the configured request
+	 * timeout. Regulation writes pass a shorter one, because a setpoint that takes
+	 * longer than a control cycle to arrive is stale by the time it lands.
 	 */
-	public async write(fields: Record<string, string | number>): Promise<void> {
-		await this.request('POST', '/write', JSON.stringify({ state: fields }));
+	public async write(fields: Record<string, string | number>, timeoutMs?: number): Promise<void> {
+		await this.request('POST', '/write', JSON.stringify({ state: fields }), timeoutMs);
 	}
 
-	private request(method: 'GET' | 'POST', path: string, payload?: string): Promise<string> {
+	/**
+	 * Arms the request deadline and returns a canceller.
+	 *
+	 * Prefers the adapter's managed timer so the timeout is cleaned up with the
+	 * instance. That timer refuses to start once ioBroker has begun shutting the
+	 * adapter down, though — and the unload path still issues writes (neutralising the
+	 * heads). Falling back to a plain timer there keeps those last requests bounded
+	 * instead of letting them hang until the process is killed.
+	 *
+	 * @param onDeadline invoked when the timeout expires
+	 * @param timeoutMs deadline for this request
+	 */
+	private armDeadline(onDeadline: () => void, timeoutMs: number): () => void {
+		const managed = this.timers.setTimeout(onDeadline, timeoutMs);
+		if (managed !== undefined) {
+			return () => this.timers.clearTimeout(managed);
+		}
+		const plain = setTimeout(onDeadline, timeoutMs);
+		return () => clearTimeout(plain);
+	}
+
+	private request(
+		method: 'GET' | 'POST',
+		path: string,
+		payload?: string,
+		timeoutMs = this.timeoutMs,
+	): Promise<string> {
 		return new Promise<string>((resolve, reject) => {
 			const url = new URL(path, this.baseUrl);
 			// Explicit, although keepAlive:false already implies it — the head should
@@ -126,13 +155,13 @@ export class SunEnergyXtApi {
 			let settled = false;
 			// Holder so settle() can clear a timer that is only armed further below
 			// (it needs the request object, which does not exist yet).
-			const pending: { deadline?: ioBroker.Timeout } = {};
+			const pending: { clear?: () => void } = {};
 			const settle = (err?: Error, data?: string): void => {
 				if (settled) {
 					return;
 				}
 				settled = true;
-				this.timers.clearTimeout(pending.deadline);
+				pending.clear?.();
 				if (err) {
 					reject(err);
 				} else {
@@ -150,6 +179,7 @@ export class SunEnergyXtApi {
 				},
 				res => {
 					let data = '';
+					let ended = false;
 					res.on('data', chunk => {
 						data += chunk;
 						if (data.length > MAX_RESPONSE_BYTES) {
@@ -157,6 +187,7 @@ export class SunEnergyXtApi {
 						}
 					});
 					res.on('end', () => {
+						ended = true;
 						const status = res.statusCode ?? 0;
 						if (status < 200 || status >= 300) {
 							settle(new Error(`HTTP ${status}`));
@@ -164,12 +195,25 @@ export class SunEnergyXtApi {
 						}
 						settle(undefined, data);
 					});
+					// A head that dies mid-response emits neither 'end' here nor 'error' on
+					// the request — without these two the promise would never settle and the
+					// caller (poll, control write, failsafe) would wait forever.
+					res.on('error', e => settle(e));
+					res.on('close', () => {
+						if (!ended) {
+							settle(new Error('Response closed before it finished'));
+						}
+					});
 				},
 			);
-			// One deadline for the whole request rather than req.setTimeout(), which only
-			// starts once a socket is assigned: with maxSockets 1 a request can also spend
-			// time queued behind a stuck one, and that wait must count against the timeout.
-			pending.deadline = this.timers.setTimeout(() => req.destroy(new Error('Timeout')), this.timeoutMs);
+			// The whole request, not req.setTimeout(), which starts only once a socket is
+			// assigned — with maxSockets 1 a request also waits behind a stuck one.
+			// It settles the promise before tearing the socket down: req.destroy() on an
+			// already-destroyed request emits no 'error', which would strand the caller.
+			pending.clear = this.armDeadline(() => {
+				settle(new Error('Timeout'));
+				req.destroy();
+			}, timeoutMs);
 			req.on('error', e => settle(e));
 			if (payload !== undefined) {
 				req.write(payload);
@@ -177,4 +221,13 @@ export class SunEnergyXtApi {
 			req.end();
 		});
 	}
+}
+
+/**
+ * True for a JSON object that can carry device fields — not null, not an array.
+ *
+ * @param v parsed JSON value
+ */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+	return typeof v === 'object' && v !== null && !Array.isArray(v);
 }

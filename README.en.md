@@ -23,7 +23,7 @@ Integration and self-consumption control for **[SunEnergyXT 500 / 500 PRO](https
 
 * Manages **one to three heads** in a single instance, each under its own subtree `heads.<n>.*`, plus combined `total.*` aggregates.
 * Polls the local API (`GET /read`) and mirrors all stable fields to states: SoC, battery/grid/load/PV power, per-MPPT current/voltage, daily energy counters, per-pack SoC, device/firmware info and meter status.
-* Writable control fields (`POST /write`, confirmed by re-reading), matching the official integration's control surface except fields the API docs mark as *reserved*: grid setpoint `GS`, max feed-in `IS`, SoC limits `SI`/`SA`/`SO`, self-consumption mode `MM`, meter config `MD`, timezone `TZ`, restart `RT`, max grid output `MG`, the `LFB`/`LPS`/`PM` switches and local mode `LM` (⚠️ `LM=1` blocks cloud/app control until reset). Reserved fields (e.g. `PT`, `SI1`, `SA1`) are exposed read-only only.
+* Writable control fields (`POST /write`, confirmed by re-reading), matching the official integration's control surface except fields the API docs mark as *reserved*: grid setpoint `GS`, max feed-in `IS`, SoC limits `SI`/`SA`/`SO`, self-consumption mode `MM`, meter config `MD`, timezone `TZ`, restart `RT`, max grid output `MG`, the `LFB`/`LPS`/`PM` switches and local mode `LM` (⚠️ `LM=1` blocks cloud/app control until reset). SoC hysteresis `SI1`/`SA1` (documented as writable by the manufacturer, default 5% each) keep their established `heads.<n>.battery.*` ids so existing recordings stay intact. Fields the API docs still mark as reserved (e.g. `PT`) are exposed read-only.
 * Two switchable **control modes**: an adapter-side self-consumption **controller** (writes `GS` from *any* ioBroker meter state, feed-forward + P, with watchdog/failsafe) that **splits one grid setpoint across all heads**, or **device self-regulation** (binds a supported meter into a single storage and lets the device control itself) — plus an **off** mode for pure monitoring.
 * A **"Test all heads"** button in the admin checks reachability of each configured head (model + SoC) before you save.
 * Connection indicator (`info.connection`) plus `info.lastUpdate`, and per-head `online` / `lastError`.
@@ -75,9 +75,11 @@ In both control modes the adapter **owns `MM`**: on every poll it checks each he
 * **Target grid power** (W, default 0): 0 = zero feed-in; positive values keep a small deliberate grid draw (never feed in), negative values a small deliberate feed-in — same sign convention as the source state (`>0` = draw).
 * **Max. adjustment per correction** (W, default 500, 0 = unlimited): caps how far the setpoint moves per control step, so a high gain cannot overshoot on meter spikes.
 * **Gain** (default 0.3), **Dead band** (W), **Min. write interval** (ms), **Per-head write dead band** (W — minimum change of a head's setpoint before it is re-written, to avoid chatter as the split shifts). Each head's maximum power is **detected automatically** from the device (800 W for a 500, 2400 W for a 500 PRO), so mixed setups work without extra configuration.
-* **Watchdog warn / failsafe (s)** — if the grid source goes stale, the controller logs a warning and finally forces `GS=0` on **all heads** (safe neutral) until the source recovers. Watchdog telemetry is exposed under `controller.*`.
+* **Meter settling time (ms)** (default 0) — readings taken *before* the last setpoint write are always discarded, because they still describe the state before it. Keep 0 for meters whose value follows the physical change immediately; raise it slightly above the measured content delay for meters that publish fresh timestamps while the value still lags.
+* **Also steer the inverter limit (IS)** (default off) — in addition to `GS`, the controller sets the maximum inverter output: the discharge part of `GS` plus whatever the load port draws, capped to the current PV power once a head has reached its discharge floor. Only useful when a load is wired to the load port. While it is on, manual `IS` writes are ignored; use `MG` for a permanent limit.
+* **Watchdog warn / failsafe (s)** — if the grid source goes stale, the controller logs a warning and finally forces `GS=0` on every reachable head (safe neutral) until the source recovers. Watchdog telemetry is exposed under `controller.*`.
 
-The controller reads each device's actual grid power (`GP`) back before correcting, which provides natural anti-windup when a device internally limits (e.g. by SoC).
+The controller works from the setpoint it last commanded, not from a fresh device read. The polled grid power (`GP`) acts as a correction: when a device visibly does not follow its setpoint for more than 10 s (internal limiting by SoC or temperature), the reported value is adopted as the new feed-forward base. It also compares the `GS` echoed by each device against what it commanded and warns when they differ — that means a second control path is writing `GS` as well.
 
 *Device self-regulation* (Mode A, **single head only**) — fields:
 * **Meter type** — EcoTracker / Shelly 3EM / Shelly Pro 3EM / Tasmota.
@@ -159,7 +161,7 @@ By ioBroker convention all writable fields live under each head's `control.*`. B
 
 > Tip: in ioBroker admin you can also filter the object list by the *writable* flag to find all controls at once.
 
-`device.PK` is derived from `DevType` on firmware that no longer reports `PK`. Reserved fields (`PT`, `SI1`, `SA1`) are exposed read-only. Fields the manufacturer dropped (`UP`) or that are doc-only artefacts (`WT`, `BN`) are not exposed; anything unmapped is still available in `heads.<n>.info.rawResponse`.
+`device.PK` is derived from `DevType` on firmware that no longer reports `PK`. `SI1`/`SA1` are writable (SoC hysteresis, default 5%); fields still marked reserved (`PT`) are exposed read-only. Fields the manufacturer dropped (`UP`) or that are doc-only artefacts (`WT`, `BN`) are not exposed; anything unmapped is still available in `heads.<n>.info.rawResponse`.
 
 ## Manual meter / mode fields (MM / MD)
 
@@ -175,6 +177,7 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 * Daily energy counters (`PD`/`GD1`/`GD2`/`LD`) are raw **Wh**, not kWh. `PD` requires control module firmware `ES 1.1.14` (marketed as "1.1.4" — the public numbering differs from the internal one in `ES`); older firmware simply omits the field and the state stays empty.
 * Daily counters are reset by the device on reboot, so a firmware update mid-day drops them back to 0.
 * `MD` and `TZ` take effect immediately but are not guaranteed to be echoed back verbatim by the device — confirm by effect, not by echo.
+* **A hard failure of the ioBroker host leaves the last setpoint running.** The heads have no setpoint timeout of their own. A normal stop, restart or mode change is handled — the adapter neutralises the heads and, if that does not succeed, remembers it (`info.gsOwned`) and finishes on the next start. A power cut or a killed process cannot be covered this way.
 * **PV inputs are untested with hardware** (the reference installation runs without PV modules, so `PV1–4` are always 0). The integration and controller are PV-agnostic and complete, but PV firmware edge cases (e.g. battery full + PV surplus, UPS/bypass fields `FP`/`UG`) are unverified — feedback welcome.
 
 ## Troubleshooting

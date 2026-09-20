@@ -24,7 +24,8 @@ __export(states_exports, {
   cfgNum: () => cfgNum,
   controlDefs: () => controlDefs,
   measurementDefs: () => measurementDefs,
-  roundTo: () => roundTo
+  roundTo: () => roundTo,
+  subscribedControlPatterns: () => subscribedControlPatterns
 });
 module.exports = __toCommonJS(states_exports);
 const measurementDefs = [
@@ -38,7 +39,8 @@ const measurementDefs = [
     name: { en: "Total state of charge", de: "Gesamt-Ladezustand" }
   },
   {
-    // The doc names this field "PB", but real firmware reports it as "BP" (+charge / -discharge).
+    // Early API docs named this field "PB"; both the docs and the firmware now agree
+    // on "BP" (+charge / -discharge).
     id: "battery.BP",
     field: "BP",
     role: "value.power",
@@ -295,21 +297,32 @@ const measurementDefs = [
     type: "number",
     name: { en: "Battery packs (online)", de: "Batteriepacks (online)" }
   },
+  // SI1/SA1 were reserved fields until the manufacturer documented them as writable
+  // (default 5% each). They keep their established "battery." ids rather than moving
+  // to "control." with their SI/SA/SO siblings: renaming them would orphan the data
+  // points of everyone already recording them. subscribedControlPatterns() derives the
+  // subscriptions from write:true, so their location does not matter for writes.
   {
     id: "battery.SI1",
     field: "SI1",
-    role: "value.battery",
+    min: 0,
+    max: 50,
+    role: "level",
     unit: "%",
     type: "number",
-    name: { en: "Discharge SoC hysteresis", de: "Entlade-SoC-Hysterese" }
+    name: { en: "Discharge SoC hysteresis", de: "Entlade-SoC-Hysterese" },
+    write: true
   },
   {
     id: "battery.SA1",
     field: "SA1",
-    role: "value.battery",
+    min: 0,
+    max: 50,
+    role: "level",
     unit: "%",
     type: "number",
-    name: { en: "Charge SoC hysteresis", de: "Lade-SoC-Hysterese" }
+    name: { en: "Charge SoC hysteresis", de: "Lade-SoC-Hysterese" },
+    write: true
   },
   // Device / status
   {
@@ -575,6 +588,8 @@ const controlDefs = [
   {
     id: "control.GS",
     field: "GS",
+    min: -2400,
+    max: 2400,
     role: "level",
     unit: "W",
     type: "number",
@@ -587,6 +602,8 @@ const controlDefs = [
   {
     id: "control.IS",
     field: "IS",
+    min: 0,
+    max: 2400,
     role: "level",
     unit: "W",
     type: "number",
@@ -596,6 +613,8 @@ const controlDefs = [
   {
     id: "control.SI",
     field: "SI",
+    min: 1,
+    max: 100,
     role: "level",
     unit: "%",
     type: "number",
@@ -605,6 +624,8 @@ const controlDefs = [
   {
     id: "control.SA",
     field: "SA",
+    min: 1,
+    max: 100,
     role: "level",
     unit: "%",
     type: "number",
@@ -614,6 +635,8 @@ const controlDefs = [
   {
     id: "control.SO",
     field: "SO",
+    min: 1,
+    max: 100,
     role: "level",
     unit: "%",
     type: "number",
@@ -659,6 +682,8 @@ const controlDefs = [
   {
     id: "control.MG",
     field: "MG",
+    min: 1,
+    max: 2400,
     role: "level",
     unit: "W",
     type: "number",
@@ -810,6 +835,9 @@ function cfgNum(value, def) {
   const n = Number(value);
   return Number.isFinite(n) ? n : def;
 }
+function subscribedControlPatterns(defs) {
+  return defs.filter((d) => d.write).map((d) => `heads.*.${d.id}`);
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   TASMOTA_PWR_BY_SUBTYPE,
@@ -818,6 +846,7 @@ function cfgNum(value, def) {
   cfgNum,
   controlDefs,
   measurementDefs,
-  roundTo
+  roundTo,
+  subscribedControlPatterns
 });
 //# sourceMappingURL=states.js.map

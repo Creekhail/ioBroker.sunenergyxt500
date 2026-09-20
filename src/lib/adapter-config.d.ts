@@ -32,6 +32,12 @@ declare global {
 			controllerMinIntervalMs: number;
 			// Minimum change of a head's setpoint before it is re-written (anti-chatter).
 			controllerWriteDeadBandW: number;
+			// Extra settling time in ms for meters whose value lags behind their timestamp.
+			controllerMeterStabilizationMs: number;
+			// Steer the inverter output limit IS alongside GS (opt-in).
+			controllerControlIs: boolean;
+			// Minimum change of a head's IS before it is re-written.
+			controllerIsWriteDeadBandW: number;
 			watchdogWarnSec: number;
 			watchdogFailsafeSec: number;
 			// Mode A — device-native meter binding (single head only)

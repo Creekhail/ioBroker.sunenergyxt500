@@ -3,9 +3,18 @@
  */
 
 import { expect } from 'chai';
+import { asString, errMsg, hostKey, num } from './lib/values';
 import { controllerStateDefs } from './lib/controller';
 import { NAME_TRANSLATIONS } from './lib/name-translations';
-import { applyMeterModeCoupling, buildMeterMd, cfgNum, controlDefs, measurementDefs, roundTo } from './lib/states';
+import {
+	applyMeterModeCoupling,
+	buildMeterMd,
+	cfgNum,
+	controlDefs,
+	measurementDefs,
+	roundTo,
+	subscribedControlPatterns,
+} from './lib/states';
 
 describe('state name translations', () => {
 	const LANGS = ['ru', 'pt', 'nl', 'fr', 'it', 'es', 'pl', 'uk', 'zh-cn'];
@@ -72,22 +81,40 @@ describe('state definitions', () => {
 		expect(new Set(ids).size).to.equal(ids.length);
 	});
 
-	it('expose the official writable fields except reserved ones (no PT)', () => {
-		const writable = controlDefs
+	it('expose exactly the documented writable fields', () => {
+		// Across ALL definitions, not just controlDefs: SI1/SA1 are writable while
+		// keeping their historic battery.* ids, so a controlDefs-only check would
+		// silently miss them and this list would stop meaning anything.
+		const writable = [...measurementDefs, ...controlDefs]
 			.filter(d => d.write)
 			.map(d => d.field)
 			.sort();
 		expect(writable).to.deep.equal(
-			['GS', 'IS', 'SI', 'SA', 'SO', 'MM', 'MD', 'TZ', 'RT', 'MG', 'LM', 'LFB', 'LPS', 'PM'].sort(),
+			['GS', 'IS', 'SI', 'SA', 'SI1', 'SA1', 'SO', 'MM', 'MD', 'TZ', 'RT', 'MG', 'LM', 'LFB', 'LPS', 'PM'].sort(),
 		);
 	});
 
 	it('does not expose any API-reserved field as writable', () => {
-		const reserved = ['SI1', 'SA1', 'PO', 'PT', 'SD', 'CF'];
-		const writableFields = controlDefs.filter(d => d.write).map(d => d.field);
+		// SI1/SA1 were on this list until the manufacturer documented them as writable
+		// with a 5% default; PO/PT/SD/CF remain reserved.
+		const reserved = ['PO', 'PT', 'SD', 'CF'];
+		const writableFields = [...measurementDefs, ...controlDefs].filter(d => d.write).map(d => d.field);
 		for (const r of reserved) {
 			expect(writableFields, `reserved field ${r} must not be writable`).to.not.include(r);
 		}
+	});
+
+	it('subscribes to every writable state and nothing else', () => {
+		const all = [...measurementDefs, ...controlDefs];
+		const patterns = subscribedControlPatterns(all);
+		const writableIds = all.filter(d => d.write).map(d => `heads.*.${d.id}`);
+		expect(patterns.slice().sort()).to.deep.equal(writableIds.slice().sort());
+		// The historic battery.* ids must be covered despite sitting outside control.*.
+		expect(patterns).to.include('heads.*.battery.SI1');
+		expect(patterns).to.include('heads.*.battery.SA1');
+		// Read-only measurements must not generate subscriptions.
+		expect(patterns).to.not.include('heads.*.battery.SC');
+		expect(patterns).to.not.include('heads.*.grid.GP');
 	});
 });
 
@@ -167,5 +194,68 @@ describe('buildMeterMd', () => {
 	it('returns empty string for Tasmota with an unknown / unset subtype', () => {
 		expect(buildMeterMd({ type: 'tasmota', id: 'tas-prefix' })).to.equal('');
 		expect(buildMeterMd({ type: 'tasmota', id: 'tas-prefix', tasmotaSubtype: 'NOPE' })).to.equal('');
+	});
+});
+
+describe('num', () => {
+	it('accepts real numbers and numeric strings', () => {
+		expect(num(0)).to.equal(0);
+		expect(num(-1500)).to.equal(-1500);
+		expect(num('42')).to.equal(42);
+	});
+
+	it('rejects values that Number() would silently turn into 0', () => {
+		// This is the point of the helper: Number(null), Number('') and Number(false)
+		// are all 0 and pass isFinite, so a missing field would become a real reading
+		// of zero watts — or, for SI, a discharge floor of 0 %.
+		expect(num(null)).to.equal(undefined);
+		expect(num(undefined)).to.equal(undefined);
+		expect(num('')).to.equal(undefined);
+		expect(num(false)).to.equal(undefined);
+		expect(num(true)).to.equal(undefined);
+	});
+
+	it('rejects non-numeric junk', () => {
+		expect(num('abc')).to.equal(undefined);
+		expect(num({})).to.equal(undefined);
+		expect(num(NaN)).to.equal(undefined);
+		expect(num(Infinity)).to.equal(undefined);
+	});
+});
+
+describe('asString', () => {
+	it('renders primitives and serialises objects', () => {
+		expect(asString('x')).to.equal('x');
+		expect(asString(5)).to.equal('5');
+		expect(asString(null)).to.equal('');
+		expect(asString(undefined)).to.equal('');
+		expect(asString({ a: 1 })).to.equal('{"a":1}');
+	});
+});
+
+describe('errMsg', () => {
+	it('prefers the Error message over its string form', () => {
+		expect(errMsg(new Error('boom'))).to.equal('boom');
+		expect(errMsg('plain')).to.equal('plain');
+		expect(errMsg(undefined)).to.equal('undefined');
+	});
+});
+
+describe('hostKey', () => {
+	it('treats the spellings of one address as one device', () => {
+		const same = ['192.168.1.5', '192.168.1.5/', 'http://192.168.1.5', 'HTTPS://192.168.1.5//', ' 192.168.1.5 '];
+		const keys = new Set(same.map(hostKey));
+		expect([...keys]).to.deep.equal(['192.168.1.5']);
+	});
+
+	it('keeps genuinely different addresses apart', () => {
+		expect(hostKey('192.168.1.5')).to.not.equal(hostKey('192.168.1.6'));
+		// The port is part of the address, not decoration.
+		expect(hostKey('192.168.1.5:8080')).to.not.equal(hostKey('192.168.1.5'));
+	});
+
+	it('survives an empty or missing value', () => {
+		expect(hostKey('')).to.equal('');
+		expect(hostKey(undefined as unknown as string)).to.equal('');
 	});
 });

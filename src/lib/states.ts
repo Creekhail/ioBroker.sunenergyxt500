@@ -40,6 +40,10 @@ export interface StateDef {
 	states?: Record<number, string>;
 	/** Whether the state is writable (control field sent back via /write) */
 	write?: boolean;
+	/** Lowest value accepted for a manual write (inclusive). */
+	min?: number;
+	/** Highest value accepted for a manual write (inclusive). */
+	max?: number;
 	/**
 	 * If set, the value is computed from the whole reported object instead of a
 	 * single field (e.g. PK is derived from DevType on newer firmware).
@@ -59,7 +63,8 @@ export const measurementDefs: StateDef[] = [
 		name: { en: 'Total state of charge', de: 'Gesamt-Ladezustand' },
 	},
 	{
-		// The doc names this field "PB", but real firmware reports it as "BP" (+charge / -discharge).
+		// Early API docs named this field "PB"; both the docs and the firmware now agree
+		// on "BP" (+charge / -discharge).
 		id: 'battery.BP',
 		field: 'BP',
 		role: 'value.power',
@@ -316,21 +321,32 @@ export const measurementDefs: StateDef[] = [
 		type: 'number',
 		name: { en: 'Battery packs (online)', de: 'Batteriepacks (online)' },
 	},
+	// SI1/SA1 were reserved fields until the manufacturer documented them as writable
+	// (default 5% each). They keep their established "battery." ids rather than moving
+	// to "control." with their SI/SA/SO siblings: renaming them would orphan the data
+	// points of everyone already recording them. subscribedControlPatterns() derives the
+	// subscriptions from write:true, so their location does not matter for writes.
 	{
 		id: 'battery.SI1',
 		field: 'SI1',
-		role: 'value.battery',
+		min: 0,
+		max: 50,
+		role: 'level',
 		unit: '%',
 		type: 'number',
 		name: { en: 'Discharge SoC hysteresis', de: 'Entlade-SoC-Hysterese' },
+		write: true,
 	},
 	{
 		id: 'battery.SA1',
 		field: 'SA1',
-		role: 'value.battery',
+		min: 0,
+		max: 50,
+		role: 'level',
 		unit: '%',
 		type: 'number',
 		name: { en: 'Charge SoC hysteresis', de: 'Lade-SoC-Hysterese' },
+		write: true,
 	},
 	// Device / status
 	{
@@ -604,6 +620,8 @@ export const controlDefs: StateDef[] = [
 	{
 		id: 'control.GS',
 		field: 'GS',
+		min: -2400,
+		max: 2400,
 		role: 'level',
 		unit: 'W',
 		type: 'number',
@@ -616,6 +634,8 @@ export const controlDefs: StateDef[] = [
 	{
 		id: 'control.IS',
 		field: 'IS',
+		min: 0,
+		max: 2400,
 		role: 'level',
 		unit: 'W',
 		type: 'number',
@@ -625,6 +645,8 @@ export const controlDefs: StateDef[] = [
 	{
 		id: 'control.SI',
 		field: 'SI',
+		min: 1,
+		max: 100,
 		role: 'level',
 		unit: '%',
 		type: 'number',
@@ -634,6 +656,8 @@ export const controlDefs: StateDef[] = [
 	{
 		id: 'control.SA',
 		field: 'SA',
+		min: 1,
+		max: 100,
 		role: 'level',
 		unit: '%',
 		type: 'number',
@@ -643,6 +667,8 @@ export const controlDefs: StateDef[] = [
 	{
 		id: 'control.SO',
 		field: 'SO',
+		min: 1,
+		max: 100,
 		role: 'level',
 		unit: '%',
 		type: 'number',
@@ -688,6 +714,8 @@ export const controlDefs: StateDef[] = [
 	{
 		id: 'control.MG',
 		field: 'MG',
+		min: 1,
+		max: 2400,
 		role: 'level',
 		unit: 'W',
 		type: 'number',
@@ -899,4 +927,22 @@ export function cfgNum(value: unknown, def: number): number {
 	}
 	const n = Number(value);
 	return Number.isFinite(n) ? n : def;
+}
+
+/**
+ * Subscription patterns covering every writable state, derived from the definitions
+ * themselves rather than hard-coded.
+ *
+ * Most writable fields live under `control.`, but SI1/SA1 kept their historic
+ * `battery.` ids when the manufacturer turned them from reserved into writable — a
+ * rename would have orphaned existing data points. Deriving the patterns from
+ * `write: true` keeps the subscriptions correct wherever a writable state sits.
+ *
+ * @param defs all state definitions (measurements and controls)
+ */
+export function subscribedControlPatterns(defs: StateDef[]): string[] {
+	// One exact pattern per writable state rather than a "<group>.*" wildcard: the
+	// battery group is mostly read-only, and a wildcard there would deliver an event
+	// for every polled measurement only to have it dropped again as acknowledged.
+	return defs.filter(d => d.write).map(d => `heads.*.${d.id}`);
 }

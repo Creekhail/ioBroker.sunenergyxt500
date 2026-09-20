@@ -65,28 +65,54 @@ class SunEnergyXtApi {
   }
   /** Reads the current device snapshot (decoded `state.reported`) plus the original body. */
   async read() {
-    var _a;
     const body = await this.request("GET", "/read");
     const parsed = JSON.parse(body);
-    const reported = (_a = parsed == null ? void 0 : parsed.state) == null ? void 0 : _a.reported;
-    if (reported && typeof reported === "object") {
+    if (!isPlainObject(parsed)) {
+      throw new Error("Unexpected /read response structure");
+    }
+    if ("state" in parsed) {
+      const state = parsed.state;
+      const reported = isPlainObject(state) ? state.reported : void 0;
+      if (!isPlainObject(reported)) {
+        throw new Error("Unexpected /read response structure");
+      }
       return { reported, body };
     }
-    if (parsed && typeof parsed === "object") {
-      return { reported: parsed, body };
-    }
-    throw new Error("Unexpected /read response structure");
+    return { reported: parsed, body };
   }
   /**
    * Writes one or more target fields partially under `state`.
    * Resolves on HTTP 2xx; the caller must confirm the effect via read().
    *
    * @param fields - map of API field name to value
+   * @param timeoutMs - deadline for this write; defaults to the configured request
+   * timeout. Regulation writes pass a shorter one, because a setpoint that takes
+   * longer than a control cycle to arrive is stale by the time it lands.
    */
-  async write(fields) {
-    await this.request("POST", "/write", JSON.stringify({ state: fields }));
+  async write(fields, timeoutMs) {
+    await this.request("POST", "/write", JSON.stringify({ state: fields }), timeoutMs);
   }
-  request(method, path, payload) {
+  /**
+   * Arms the request deadline and returns a canceller.
+   *
+   * Prefers the adapter's managed timer so the timeout is cleaned up with the
+   * instance. That timer refuses to start once ioBroker has begun shutting the
+   * adapter down, though — and the unload path still issues writes (neutralising the
+   * heads). Falling back to a plain timer there keeps those last requests bounded
+   * instead of letting them hang until the process is killed.
+   *
+   * @param onDeadline invoked when the timeout expires
+   * @param timeoutMs deadline for this request
+   */
+  armDeadline(onDeadline, timeoutMs) {
+    const managed = this.timers.setTimeout(onDeadline, timeoutMs);
+    if (managed !== void 0) {
+      return () => this.timers.clearTimeout(managed);
+    }
+    const plain = setTimeout(onDeadline, timeoutMs);
+    return () => clearTimeout(plain);
+  }
+  request(method, path, payload, timeoutMs = this.timeoutMs) {
     return new Promise((resolve, reject) => {
       const url = new import_node_url.URL(path, this.baseUrl);
       const headers = { Connection: "close" };
@@ -97,11 +123,12 @@ class SunEnergyXtApi {
       let settled = false;
       const pending = {};
       const settle = (err, data) => {
+        var _a;
         if (settled) {
           return;
         }
         settled = true;
-        this.timers.clearTimeout(pending.deadline);
+        (_a = pending.clear) == null ? void 0 : _a.call(pending);
         if (err) {
           reject(err);
         } else {
@@ -119,6 +146,7 @@ class SunEnergyXtApi {
         },
         (res) => {
           let data = "";
+          let ended = false;
           res.on("data", (chunk) => {
             data += chunk;
             if (data.length > MAX_RESPONSE_BYTES) {
@@ -127,6 +155,7 @@ class SunEnergyXtApi {
           });
           res.on("end", () => {
             var _a;
+            ended = true;
             const status = (_a = res.statusCode) != null ? _a : 0;
             if (status < 200 || status >= 300) {
               settle(new Error(`HTTP ${status}`));
@@ -134,9 +163,18 @@ class SunEnergyXtApi {
             }
             settle(void 0, data);
           });
+          res.on("error", (e) => settle(e));
+          res.on("close", () => {
+            if (!ended) {
+              settle(new Error("Response closed before it finished"));
+            }
+          });
         }
       );
-      pending.deadline = this.timers.setTimeout(() => req.destroy(new Error("Timeout")), this.timeoutMs);
+      pending.clear = this.armDeadline(() => {
+        settle(new Error("Timeout"));
+        req.destroy();
+      }, timeoutMs);
       req.on("error", (e) => settle(e));
       if (payload !== void 0) {
         req.write(payload);
@@ -144,6 +182,9 @@ class SunEnergyXtApi {
       req.end();
     });
   }
+}
+function isPlainObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
