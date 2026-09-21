@@ -1,8 +1,21 @@
 {
 	"common": {
 		"name": "sunenergyxt500",
-		"version": "0.2.10",
+		"version": "0.3.0",
 		"news": {
+			"0.3.0": {
+				"en": "The controller respects the heads' own SoC hysteresis instead of commanding a head that refuses, and MG is treated as the feed-in cap only — a head with a lowered feed-in limit is no longer throttled while charging or supplying its load port. New: optional inverter-limit steering, a meter settling time, and a setpoint left on a head now survives a restart.",
+				"de": "Der Regler respektiert die geräteeigene SoC-Hysterese, statt einen Kopf zu kommandieren, der ablehnt, und MG gilt nur noch als Einspeisegrenze — ein Kopf mit gedrosselter Einspeisung wird beim Laden und beim Versorgen seines Last-Ports nicht mehr ausgebremst. Neu: optionale Steuerung der Wechselrichtergrenze, eine Zähler-Einschwingzeit, und ein auf einem Kopf stehender Sollwert überlebt jetzt einen Neustart.",
+				"ru": "Регулятор учитывает собственный гистерезис SOC блоков вместо того, чтобы командовать блоком, который отказывает, а MG теперь считается только пределом отдачи в сеть — блок с пониженным пределом отдачи больше не ограничивается при заряде и при питании своего нагрузочного порта. Новое: опциональное управление пределом инвертора, время установления счётчика, и заданное значение на блоке переживает перезапуск.",
+				"pt": "O controlador respeita a histerese de SOC das próprias unidades em vez de comandar uma unidade que recusa, e MG passa a ser apenas o limite de injeção — uma unidade com limite de injeção reduzido deixa de ser estrangulada ao carregar ou ao alimentar a sua porta de carga. Novo: controlo opcional do limite do inversor, tempo de estabilização do contador, e um ponto de ajuste deixado numa unidade sobrevive a um reinício.",
+				"nl": "De regelaar respecteert de eigen SoC-hysterese van de units in plaats van een unit aan te sturen die weigert, en MG geldt alleen nog als teruglevergrens — een unit met een verlaagde teruglevergrens wordt niet meer afgeknepen tijdens het laden of het voeden van zijn load-poort. Nieuw: optionele sturing van de omvormerlimiet, een instellingstijd voor de meter, en een setpoint op een unit overleeft een herstart.",
+				"fr": "Le régulateur respecte l'hystérésis SOC propre aux unités au lieu de commander une unité qui refuse, et MG n'est plus qu'une limite d'injection — une unité dont l'injection est bridée n'est plus étranglée pendant la charge ni pour alimenter son port de charge. Nouveau : pilotage optionnel de la limite de l'onduleur, temps de stabilisation du compteur, et une consigne laissée sur une unité survit à un redémarrage.",
+				"it": "Il regolatore rispetta l'isteresi SOC delle unità invece di comandare un'unità che rifiuta, e MG vale solo come limite di immissione — un'unità con immissione ridotta non viene più strozzata durante la carica né nell'alimentare la propria porta di carico. Novità: pilotaggio opzionale del limite dell'inverter, tempo di assestamento del contatore, e un setpoint lasciato su un'unità sopravvive a un riavvio.",
+				"es": "El controlador respeta la histéresis de SOC propia de las unidades en lugar de mandar sobre una que se niega, y MG pasa a ser solo el límite de inyección — una unidad con la inyección limitada ya no se estrangula al cargar ni al alimentar su puerto de carga. Nuevo: control opcional del límite del inversor, tiempo de estabilización del contador, y una consigna dejada en una unidad sobrevive a un reinicio.",
+				"pl": "Regulator respektuje własną histerezę SOC jednostek zamiast sterować jednostką, która odmawia, a MG jest traktowane wyłącznie jako limit oddawania do sieci — jednostka z obniżonym limitem oddawania nie jest już dławiona podczas ładowania ani przy zasilaniu swojego portu obciążenia. Nowość: opcjonalne sterowanie limitem falownika, czas ustalania licznika, a wartość zadana pozostawiona na jednostce przetrwa restart.",
+				"uk": "Регулятор враховує власний гістерезис SOC блоків замість того, щоб керувати блоком, який відмовляє, а MG тепер лише межа віддачі в мережу — блок зі зниженою межею віддачі більше не обмежується під час заряджання та живлення свого навантажувального порту. Нове: опційне керування межею інвертора, час встановлення лічильника, і задане значення на блоці переживає перезапуск.",
+				"zh-cn": "控制器会遵循机组自身的 SOC 迟滞，而不再向拒绝执行的机组下发指令；MG 仅作为并网馈电上限——馈电上限被调低的机组在充电和供给自身负载口时不再被限制。新增：可选的逆变器限制控制、电表稳定时间，机组上遗留的设定点现在可以在重启后继续处理。"
+			},
 			"0.2.10": {
 				"en": "Gentler on the heads' Wi-Fi: each head is polled on its own staggered cycle instead of all heads at the same instant, and a head that fails is backed off (doubling up to 60 s) instead of being polled at full rate. Every HTTP connection is now closed after use (Connection: close, one connection pool per head), reads and writes to the same head are serialized, and the request timeout covers the whole request. Admin: the poll interval now carries a help text recommending 10-15 s for two or more heads or a weak Wi-Fi signal.",
 				"de": "Schonender für das WLAN der Köpfe: Jeder Kopf wird auf einem eigenen, zeitversetzten Zyklus abgefragt statt alle Köpfe im selben Moment, und ein ausgefallener Kopf wird abgebremst (Verdopplung bis 60 s) statt weiter mit voller Rate abgefragt. Jede HTTP-Verbindung wird jetzt nach Gebrauch geschlossen (Connection: close, ein eigener Verbindungspool je Kopf), Lesen und Schreiben auf denselben Kopf laufen serialisiert, und das Anfrage-Timeout umfasst die gesamte Anfrage. Admin: Das Abfrageintervall hat jetzt einen Hilfetext, der bei zwei oder mehr Köpfen oder schwachem WLAN-Signal 10-15 s empfiehlt.",
@@ -80,19 +93,6 @@
 				"pl": "Kontynuacja przeglądu: link do producenta/produktu w pliku README i sterownik akceptuje teraz tylko potwierdzone wartości mocy sieci (ack=true) ze stanu licznika.",
 				"uk": "Подальший перегляд: посилання на виробника/продукт у файлі README, і контролер тепер приймає лише підтверджені значення потужності мережі (ack=true) із стану лічильника.",
 				"zh-cn": "查看后续内容：自述文件中的制造商/产品链接和控制器现在仅接受来自仪表状态的已确认的电网功率值 (ack=true)。"
-			},
-			"0.2.4": {
-				"en": "State names are now provided in all ioBroker languages (hand-written English/German, machine-translated otherwise).",
-				"de": "State-Namen liegen jetzt in allen ioBroker-Sprachen vor (Englisch/Deutsch handgeschrieben, übrige maschinell übersetzt).",
-				"ru": "Названия состояний теперь предоставляются на всех языках ioBroker (рукописный английский/немецкий, в противном случае — машинный перевод).",
-				"pt": "Os nomes dos estados agora são fornecidos em todos os idiomas do ioBroker (escritos à mão em inglês/alemão, caso contrário, traduzidos automaticamente).",
-				"nl": "Staatsnamen worden nu in alle ioBroker-talen aangeboden (handgeschreven Engels/Duits, anders machinaal vertaald).",
-				"fr": "Les noms d'État sont désormais fournis dans toutes les langues d'ioBroker (anglais/allemand écrits à la main, sinon traduits automatiquement).",
-				"it": "I nomi degli stati sono ora forniti in tutte le lingue di ioBroker (inglese/tedesco scritti a mano, altrimenti tradotti automaticamente).",
-				"es": "Los nombres de los estados ahora se proporcionan en todos los idiomas de ioBroker (escritos a mano en inglés/alemán, en caso contrario traducidos automáticamente).",
-				"pl": "Nazwy stanów są teraz dostępne we wszystkich językach ioBroker (pisane ręcznie w języku angielskim/niemieckim, w przeciwnym razie tłumaczone maszynowo).",
-				"uk": "Назви штатів тепер надаються всіма мовами ioBroker (написані від руки англійською/німецькою, інакше – з машинним перекладом).",
-				"zh-cn": "现在以所有 ioBroker 语言提供状态名称（手写英语/德语，否则由机器翻译）。"
 			}
 		},
 		"titleLang": {
