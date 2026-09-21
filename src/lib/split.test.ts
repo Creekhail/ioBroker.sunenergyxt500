@@ -50,17 +50,33 @@ function setpointsOf(setpoints: { index: number; gs: number }[]): number[] {
 
 describe('computeTotalTarget', () => {
 	it('follows grid draw (discharge) and feed-in (charge)', () => {
-		expect(computeTotalTarget(0, 200, 1, 4800)).to.equal(200);
-		expect(computeTotalTarget(0, -1000, 1, 4800)).to.equal(-1000);
+		expect(computeTotalTarget(0, 200, 1, 4800, 4800)).to.equal(200);
+		expect(computeTotalTarget(0, -1000, 1, 4800, 4800)).to.equal(-1000);
 	});
 
 	it('adds the proportional term on top of the reported grid power (anti-windup)', () => {
-		expect(computeTotalTarget(500, 100, 1, 4800)).to.equal(600);
+		expect(computeTotalTarget(500, 100, 1, 4800, 4800)).to.equal(600);
 	});
 
 	it('clamps to the summed power limit in both directions', () => {
-		expect(computeTotalTarget(0, 99999, 1, 4800)).to.equal(4800);
-		expect(computeTotalTarget(0, -99999, 1, 4800)).to.equal(-4800);
+		expect(computeTotalTarget(0, 99999, 1, 4800, 4800)).to.equal(4800);
+		expect(computeTotalTarget(0, -99999, 1, 4800, 4800)).to.equal(-4800);
+	});
+
+	it('uses the charge limit for a negative result, whatever the sign of the error', () => {
+		// The case both reviews found: a positive error only means "raise the setpoint".
+		// While charging below the export cap the result stays negative and still needs
+		// the charge bound — clamping it to the export sum cut −2000 W down to −800 W.
+		expect(computeTotalTarget(-2000, 100, 1, 800, 2400)).to.equal(-1900);
+		expect(computeTotalTarget(-2000, 300, 1, 800, 2400)).to.equal(-1700);
+	});
+
+	it('still clamps a negative result at the charge limit', () => {
+		expect(computeTotalTarget(-2000, -1000, 1, 800, 2400)).to.equal(-2400);
+	});
+
+	it('clamps a positive result at the export limit, not the charge limit', () => {
+		expect(computeTotalTarget(0, 5000, 1, 800, 2400)).to.equal(800);
 	});
 });
 
@@ -126,6 +142,19 @@ describe('splitTarget', () => {
 		expect(splitTarget(-2000, heads)[0].gs).to.equal(-2000);
 	});
 
+	it('caps each head at its charge limit when the target exceeds them all', () => {
+		// The charge-side counterpart of the export cap test. Every charging test so far
+		// asked for less than one head can take, so the negative per-head cap was never
+		// exercised — removing it entirely left the suite green.
+		const heads = [head({ index: 1 }), head({ index: 2 })];
+		expect(gs(heads, -6000)).to.deep.equal([-2400, -2400]);
+	});
+
+	it('caps a head at its own charge limit, not the export one', () => {
+		const heads = [head({ index: 1, maxPower: 800, maxCharge: 2400 })];
+		expect(gs(heads, -6000)).to.deep.equal([-2400]);
+	});
+
 	it('still caps discharging at the export limit', () => {
 		const heads = [head({ index: 1, maxPower: 800, maxCharge: 2400 })];
 		expect(splitTarget(2000, heads)[0].gs).to.equal(800);
@@ -137,9 +166,11 @@ describe('computeIsTarget', () => {
 		expect(computeIsTarget(head({ index: 1 }), 800)).to.equal(800);
 	});
 
-	it('is zero while charging', () => {
+	it('goes to the device minimum while charging', () => {
 		// GS < 0 means drawing from the grid — the inverter should not output anything.
-		expect(computeIsTarget(head({ index: 1 }), -800)).to.equal(0);
+		// The floor is 1, not 0: the device documents IS as 1..2400 and a manual 0 is
+		// refused, so the controller must not write one either.
+		expect(computeIsTarget(head({ index: 1 }), -800)).to.equal(1);
 	});
 
 	it('adds the local load on top of the grid-port share', () => {
@@ -159,9 +190,23 @@ describe('computeIsTarget', () => {
 		expect(computeIsTarget(h, 600)).to.equal(150);
 	});
 
-	it('goes to zero at the discharge floor without PV', () => {
+	it('goes to the device minimum at the discharge floor without PV', () => {
 		const h = head({ index: 1, soc: 5, socMin: 10, lp: 400, pv: 0 });
-		expect(computeIsTarget(h, 600)).to.equal(0);
+		expect(computeIsTarget(h, 600)).to.equal(1);
+	});
+
+	it('never computes a limit the device would refuse', () => {
+		// Whatever the inputs, the result has to stay inside the documented 1..2400.
+		for (const gs of [-5000, -1, 0, 1, 5000]) {
+			for (const lp of [-500, 0, 300]) {
+				for (const pv of [0, 900]) {
+					const h = head({ index: 1, soc: 5, socMin: 10, lp, pv });
+					const is = computeIsTarget(h, gs);
+					expect(is, `gs=${gs} lp=${lp} pv=${pv}`).to.be.at.least(1);
+					expect(is).to.be.at.most(2400);
+				}
+			}
+		}
 	});
 
 	it('never exceeds the inverter limit', () => {

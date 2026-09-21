@@ -25,9 +25,8 @@ __export(split_exports, {
   splitTarget: () => splitTarget
 });
 module.exports = __toCommonJS(split_exports);
-function computeTotalTarget(totalGp, gridPower, gain, sumMaxPower) {
-  const limit = Math.abs(sumMaxPower);
-  return clamp(Math.round(totalGp + gain * gridPower), -limit, limit);
+function computeTotalTarget(totalGp, gridPower, gain, sumMaxExport, sumMaxCharge) {
+  return clamp(Math.round(totalGp + gain * gridPower), -Math.abs(sumMaxCharge), Math.abs(sumMaxExport));
 }
 function inDischargeBand(h) {
   const band = Math.max(0, h.socHysteresisDischarge);
@@ -90,7 +89,7 @@ function computeIsTarget(head, gs) {
   if (head.soc <= head.socMin) {
     target = Math.min(target, Math.max(head.pv, 0));
   }
-  return Math.round(clamp(target, 0, Math.abs(head.maxInverter)));
+  return Math.round(clamp(target, 1, Math.abs(head.maxInverter)));
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

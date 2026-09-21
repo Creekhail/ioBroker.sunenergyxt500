@@ -541,7 +541,7 @@ export class MultiHeadController {
 		const sumCharge = heads.reduce((acc, h) => acc + Math.abs(h.maxCharge), 0);
 		let totalTarget = inDeadBand
 			? Math.round(Math.max(-sumCharge, Math.min(sumExport, base)))
-			: computeTotalTarget(base, error, gain, error < 0 ? sumCharge : sumExport);
+			: computeTotalTarget(base, error, gain, sumExport, sumCharge);
 		// Step limit: cap the movement per correction so a meter spike cannot slam
 		// the setpoint even with a high gain (manufacturer blueprint does the same).
 		if (maxStepW > 0 && !inDeadBand) {

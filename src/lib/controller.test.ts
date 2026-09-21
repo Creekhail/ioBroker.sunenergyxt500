@@ -622,6 +622,58 @@ describe('MultiHeadController', () => {
 		expect(mock.states['controller.totalTarget']).to.equal(-2000);
 	});
 
+	it('corrects a charging setpoint by the error, not down to the export cap', async () => {
+		// Both reviews reproduced this one. The plant charges at 2000 W, which its export
+		// cap of 800 W has nothing to say about. A 100 W swing in the house load should
+		// move the setpoint to -1900; clamping the result to the export sum slammed it to
+		// -800 — a 1200 W correction for a 100 W error, and a permanent oscillation.
+		const heads = [head({ index: 1, maxPower: 800, maxCharge: 2400 })];
+		const { hooks, writes } = mockHooks(heads);
+		const mock = mockAdapter();
+		const ctrl = new MultiHeadController(mock.adapter, hooks, 'x.y.z', cfg());
+		await ctrl.start();
+		const at = sampleClock();
+		await ctrl.onGridPower(-2000, at()); // charging hard
+		writes.length = 0;
+		await ctrl.onGridPower(100, at()); // small draw: ease off by exactly that much
+		expect(mock.states['controller.totalTarget']).to.equal(-1900);
+		expect(writes).to.deep.equal([{ index: 1, gs: -1900 }]);
+	});
+
+	it('makes the same correction with the step limit in force', async () => {
+		// The step limit hides the size of the error but not its direction: it walked the
+		// setpoint back by a full step on every positive error instead of by the error.
+		const heads = [head({ index: 1, maxPower: 800, maxCharge: 2400 })];
+		const { hooks } = mockHooks(heads);
+		const mock = mockAdapter();
+		const ctrl = new MultiHeadController(mock.adapter, hooks, 'x.y.z', cfg({ maxStepW: 500 }));
+		await ctrl.start();
+		const at = sampleClock();
+		// Settled at -2000 from earlier cycles, as the feed-forward base records it.
+		(ctrl as unknown as { ffBase: Map<number, number> }).ffBase.set(1, -2000);
+		await ctrl.onGridPower(100, at());
+		// Well inside the 500 W step, so the step limit must not be what decides this.
+		// With the old clamp the result was -800 first, which the step limit then pulled
+		// back to -1500 — a 500 W move for a 100 W error.
+		expect(mock.states['controller.totalTarget']).to.equal(-1900);
+	});
+
+	it('sums the charge limits of every head, not just the first', async () => {
+		// Three heads take 7200 W between them. Taking the first head's limit for the sum
+		// capped the whole plant at what one of them can do.
+		const heads = [
+			head({ index: 1, maxPower: 800, maxCharge: 2400 }),
+			head({ index: 2, maxPower: 2400, maxCharge: 2400 }),
+			head({ index: 3, maxPower: 800, maxCharge: 2400 }),
+		];
+		const { hooks } = mockHooks(heads);
+		const mock = mockAdapter();
+		const ctrl = new MultiHeadController(mock.adapter, hooks, 'x.y.z', cfg({ maxStepW: 9000 }));
+		await ctrl.start();
+		await ctrl.onGridPower(-6000, sampleClock()());
+		expect(mock.states['controller.totalTarget']).to.equal(-6000);
+	});
+
 	it('keeps the two caps apart inside the dead band as well', async () => {
 		// The dead band takes its own clamping path, so it needs its own case: the
 		// feed-forward base is held, and holding it at the export cap would walk a

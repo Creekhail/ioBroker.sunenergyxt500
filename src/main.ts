@@ -194,6 +194,15 @@ class Sunenergyxt500 extends utils.Adapter {
 	private pollIntervalMs = 5000;
 	/** Active control mode: off (monitoring), controller (Mode B) or device (Mode A, single head). */
 	private controlMode: 'off' | 'controller' | 'device' = 'off';
+	/**
+	 * True when 'off' is a fallback from a configuration the adapter refused, not the
+	 * operator's choice.
+	 *
+	 * Those fallbacks promise to leave the devices as they are, so they must not release
+	 * the meter binding: that would switch the device's own regulation off while the
+	 * adapter regulation they asked for cannot start either.
+	 */
+	private controlModeForced = false;
 	/** Built meter-connection string (MD) for device mode; '' when unconfigured. */
 	private meterMd = '';
 	/** Per-head flag whether the MM-mismatch warning was already logged. */
@@ -288,11 +297,13 @@ class Sunenergyxt500 extends utils.Adapter {
 		}
 
 		this.controlMode = this.config.controlMode || 'off';
+		this.controlModeForced = false;
 		if (this.controlMode === 'device' && this.heads.length > 1) {
 			this.log.error(
 				`Device self-regulation is only available with a single head, but ${this.heads.length} are configured — falling back to monitoring (off). Use the adapter controller for multiple heads.`,
 			);
 			this.controlMode = 'off';
+			this.controlModeForced = true;
 		}
 
 		for (const def of ALL_DEFS) {
@@ -331,6 +342,7 @@ class Sunenergyxt500 extends utils.Adapter {
 						'restart the instance.',
 				);
 				this.controlMode = 'off';
+				this.controlModeForced = true;
 			} else if (src.startsWith(`${this.name}.`)) {
 				// Our own states close the loop on itself. total.gridPower is the tempting one: it
 				// looks like a grid reading but is the storages’ own output, with the opposite sign.
@@ -340,6 +352,7 @@ class Sunenergyxt500 extends utils.Adapter {
 						'adapter instead. Falling back to monitoring (off).',
 				);
 				this.controlMode = 'off';
+				this.controlModeForced = true;
 			}
 		}
 
@@ -716,13 +729,15 @@ class Sunenergyxt500 extends utils.Adapter {
 			// limit (500 → 800 W, 500 PRO → 2400 W) instead of assuming a PRO.
 			const modelMax = fallbackMaxPower(data);
 			h.maxPower = num(data.MG) ?? modelMax;
-			await this.applyModelLimit(h, modelMax);
 			h.socMin = num(data.SI) ?? num(data.SO);
 			h.socMax = num(data.SA);
 			// The device resumes only once the charge has moved this far back inside its limits.
 			// Kept apart by direction: SI1 guards the floor, SA1 the ceiling.
 			h.socHysteresisDischarge = num(data.SI1);
 			h.socHysteresisCharge = num(data.SA1);
+			// After the snapshot, not inside it: this one awaits, and the fields below it
+			// decide whether the head is regulatable at all.
+			await this.applyModelLimit(h, modelMax);
 			// Anti-windup feedback: let the controller compare commanded GS vs. actual GP.
 			if (h.gp !== undefined) {
 				this.controller?.noteReportedGp(h.index, h.gp);
@@ -862,9 +877,7 @@ class Sunenergyxt500 extends utils.Adapter {
 			for (const h of this.heads) {
 				await this.writeHead(h, { MM: 0, MD: '' }, reason);
 			}
-			// Settling a binding on a device that is no longer configured can take a full
-			// timeout, and nothing here needs the result — the startup runs it alongside the
-			// other unconfigured-host jobs.
+			// The binding is gone with the writes above, so the record goes with it.
 			await this.setMeterBoundByAdapter(false);
 		} else if (this.controlMode === 'device') {
 			const h = this.heads[0];
@@ -873,9 +886,10 @@ class Sunenergyxt500 extends utils.Adapter {
 			}
 			this.meterMdPending = !(await this.writeHead(h, { MM: 1, MD: this.meterMd }, reason));
 			await this.setMeterBoundByAdapter(true);
-		} else if (await this.isMeterBoundByAdapter()) {
+		} else if (!this.controlModeForced && (await this.isMeterBoundByAdapter())) {
 			// Off mode releases a binding THIS adapter established in device mode, and only
-			// that one: a binding the owner made in the app is theirs and stays.
+			// that one: a binding the owner made in the app is theirs and stays. A mode the
+			// adapter forced to off is excluded — see controlModeForced.
 			const h = this.heads[0];
 			if (h && (await this.writeHead(h, { MM: 0, MD: '' }, 'off-cleanup'))) {
 				await this.setMeterBoundByAdapter(false);

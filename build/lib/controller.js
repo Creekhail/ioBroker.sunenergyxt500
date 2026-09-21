@@ -356,7 +356,7 @@ class MultiHeadController {
     );
     const sumExport = heads.reduce((acc, h) => acc + Math.abs(h.maxPower), 0);
     const sumCharge = heads.reduce((acc, h) => acc + Math.abs(h.maxCharge), 0);
-    let totalTarget = inDeadBand ? Math.round(Math.max(-sumCharge, Math.min(sumExport, base))) : (0, import_split.computeTotalTarget)(base, error, gain, error < 0 ? sumCharge : sumExport);
+    let totalTarget = inDeadBand ? Math.round(Math.max(-sumCharge, Math.min(sumExport, base))) : (0, import_split.computeTotalTarget)(base, error, gain, sumExport, sumCharge);
     if (maxStepW > 0 && !inDeadBand) {
       const lo = Math.max(base - maxStepW, -sumCharge);
       const hi = Math.min(base + maxStepW, sumExport);

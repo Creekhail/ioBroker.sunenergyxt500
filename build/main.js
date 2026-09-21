@@ -83,6 +83,15 @@ class Sunenergyxt500 extends utils.Adapter {
   pollIntervalMs = 5e3;
   /** Active control mode: off (monitoring), controller (Mode B) or device (Mode A, single head). */
   controlMode = "off";
+  /**
+   * True when 'off' is a fallback from a configuration the adapter refused, not the
+   * operator's choice.
+   *
+   * Those fallbacks promise to leave the devices as they are, so they must not release
+   * the meter binding: that would switch the device's own regulation off while the
+   * adapter regulation they asked for cannot start either.
+   */
+  controlModeForced = false;
   /** Built meter-connection string (MD) for device mode; '' when unconfigured. */
   meterMd = "";
   /** Per-head flag whether the MM-mismatch warning was already logged. */
@@ -168,11 +177,13 @@ class Sunenergyxt500 extends utils.Adapter {
       return;
     }
     this.controlMode = this.config.controlMode || "off";
+    this.controlModeForced = false;
     if (this.controlMode === "device" && this.heads.length > 1) {
       this.log.error(
         `Device self-regulation is only available with a single head, but ${this.heads.length} are configured \u2014 falling back to monitoring (off). Use the adapter controller for multiple heads.`
       );
       this.controlMode = "off";
+      this.controlModeForced = true;
     }
     for (const def of ALL_DEFS) {
       if (def.write) {
@@ -202,11 +213,13 @@ class Sunenergyxt500 extends utils.Adapter {
           "Controller mode is selected but no grid-power source state is configured. Falling back to monitoring (off) and leaving the devices as they are \u2014 configure the source state, then restart the instance."
         );
         this.controlMode = "off";
+        this.controlModeForced = true;
       } else if (src.startsWith(`${this.name}.`)) {
         this.log.error(
           `The configured grid-power source "${src}" is one of this adapter's own states. That feeds the controller its own output and would drive it to the limit. Point it at your meter adapter instead. Falling back to monitoring (off).`
         );
         this.controlMode = "off";
+        this.controlModeForced = true;
       }
     }
     await this.enforceMode("startup");
@@ -534,11 +547,11 @@ class Sunenergyxt500 extends utils.Adapter {
       h.packs = Math.max(1, (_c = (0, import_values.num)(data.ON)) != null ? _c : 1);
       const modelMax = (0, import_values.fallbackMaxPower)(data);
       h.maxPower = (_d = (0, import_values.num)(data.MG)) != null ? _d : modelMax;
-      await this.applyModelLimit(h, modelMax);
       h.socMin = (_e = (0, import_values.num)(data.SI)) != null ? _e : (0, import_values.num)(data.SO);
       h.socMax = (0, import_values.num)(data.SA);
       h.socHysteresisDischarge = (0, import_values.num)(data.SI1);
       h.socHysteresisCharge = (0, import_values.num)(data.SA1);
+      await this.applyModelLimit(h, modelMax);
       if (h.gp !== void 0) {
         (_f = this.controller) == null ? void 0 : _f.noteReportedGp(h.index, h.gp);
       }
@@ -673,7 +686,7 @@ class Sunenergyxt500 extends utils.Adapter {
       }
       this.meterMdPending = !await this.writeHead(h, { MM: 1, MD: this.meterMd }, reason);
       await this.setMeterBoundByAdapter(true);
-    } else if (await this.isMeterBoundByAdapter()) {
+    } else if (!this.controlModeForced && await this.isMeterBoundByAdapter()) {
       const h = this.heads[0];
       if (h && await this.writeHead(h, { MM: 0, MD: "" }, "off-cleanup")) {
         await this.setMeterBoundByAdapter(false);

@@ -526,6 +526,48 @@ describe('adapter lifecycle', function () {
 		await h.unload();
 	});
 
+	it('keeps the meter binding when the refusal forces the mode to off', async () => {
+		// The refusal above promises to leave the devices as they are. Restoring the
+		// release broke that promise: it switched the device's own regulation off while
+		// the adapter regulation the owner asked for could not start either.
+		const h = createHarness(
+			{
+				head1Host: `127.0.0.1:${head1.port}`,
+				controlMode: 'controller',
+				gridPowerStateId: '',
+				pollInterval: 3600,
+				requestTimeout: 2000,
+			},
+			{ 'info.meterBound': true }, // an earlier run bound it in device mode
+		);
+		head1.reported.MM = 1;
+		await h.ready();
+		expect(head1.writes, 'a forced off must not touch the binding').to.deep.equal([]);
+		expect(h.states['info.meterBound']?.val, 'and must not forget it either').to.equal(true);
+		await h.unload();
+	});
+
+	it('keeps the meter binding when device mode is refused for having several heads', async () => {
+		const h = createHarness(
+			{
+				head1Host: `127.0.0.1:${head1.port}`,
+				// A second, distinct host: the same one twice is deduplicated, which would
+				// leave a single head and no refusal at all.
+				head2Host: '127.0.0.1:1',
+				controlMode: 'device',
+				meterType: 'ecotracker',
+				meterId: '192.168.1.50',
+				pollInterval: 3600,
+				requestTimeout: 300,
+			},
+			{ 'info.meterBound': true },
+		);
+		await h.ready();
+		expect(head1.writes.some(w => 'MM' in w)).to.equal(false);
+		expect(h.states['info.meterBound']?.val).to.equal(true);
+		await h.unload();
+	});
+
 	it('refuses a grid source that points at its own states', async () => {
 		const h = createHarness({
 			head1Host: `127.0.0.1:${head1.port}`,
@@ -748,6 +790,58 @@ describe('adapter lifecycle: field mapping', function () {
 		expect(head.maxPower).to.equal(2400);
 	});
 
+	it('hands over three separate limits, not the export cap three times', async () => {
+		// headStates() is the only place the limit separation enters the adapter, and the
+		// controller and split tests supply their own mock values — so the whole of
+		// d1ea6c7 could be undone here with all tests still green.
+		head1.reported = { ...API_SAMPLE, MG: 800 };
+		const h = monitorOnly();
+		await h.ready();
+		await h.poll(1);
+		const [head] = (h.instance as { headStates(): HeadState[] }).headStates();
+		expect({
+			maxPower: head.maxPower,
+			maxCharge: head.maxCharge,
+			maxInverter: head.maxInverter,
+		}).to.deep.equal({ maxPower: 800, maxCharge: 2400, maxInverter: 2400 });
+	});
+
+	it('recognises the standard model from DevType when PK is absent', async () => {
+		// Older firmware does not report PK. The targeted model tests all set PK=1, so the
+		// DevType path carried the whole 800 W rating untested.
+		head1.reported = { ...API_SAMPLE, PK: undefined, DevType: 'SunEnergyXT 500', GS: 0 };
+		delete head1.reported.PK;
+		const h = monitorOnly();
+		await h.ready();
+		await h.poll(1);
+		expect(h.objects['heads.1.control.GS']?.common?.max).to.equal(800);
+		const [head] = (h.instance as { headStates(): HeadState[] }).headStates();
+		expect(head.maxPower, 'and a PRO name still gets the full rating').to.equal(800);
+	});
+
+	it('writes the narrowed bound once, not on every poll', async () => {
+		// Without the change check this is one object write per model-limited field, per
+		// head, per poll — for a value that cannot change while the head is the same.
+		head1.reported = { ...API_SAMPLE, PK: 1, GS: 0 };
+		const h = monitorOnly();
+		await h.ready();
+		const writes: string[] = [];
+		const inst = h.instance as { extendObject(id: string, part: unknown): Promise<void> };
+		const real = inst.extendObject.bind(inst);
+		inst.extendObject = (id: string, part: unknown): Promise<void> => {
+			writes.push(id);
+			return real(id, part);
+		};
+		await h.poll(1);
+		const first = writes.filter(id => id.endsWith('control.GS')).length;
+		await h.poll(1);
+		await h.poll(1);
+		expect(first, 'the first poll narrows the bound').to.equal(1);
+		expect(writes.filter(id => id.endsWith('control.GS')).length, 'later polls must not rewrite it').to.equal(
+			first,
+		);
+	});
+
 	it('refuses a manual write above what the model is rated for', async () => {
 		// Until a poll says otherwise the objects carry the PRO bound, so this can only be
 		// enforced from the model — and only for the output fields. A 500 takes the same
@@ -803,6 +897,10 @@ describe('adapter lifecycle: field mapping', function () {
 			h.objects['heads.1.control.IS']?.common?.max,
 			'while the inverter limit stays at the device maximum',
 		).to.equal(2400);
+		expect(
+			h.objects['heads.1.control.MG']?.common?.max,
+			'the export cap field is narrowed as well, not only GS',
+		).to.equal(800);
 		// Narrowing the bound must not strip the rest of the definition off the object.
 		const gs = h.objects['heads.1.control.GS']?.common;
 		expect({ min: gs?.min, unit: gs?.unit, role: gs?.role, write: gs?.write }).to.deep.equal({
@@ -1030,6 +1128,14 @@ describe('adapter lifecycle: guarded mechanisms', function () {
 		);
 		head1.reported.MG = 800; // a 500, not a PRO
 		await h.ready();
+		// Without this poll the head's export cap is still the constructor default of
+		// 2400, and the assertion below would be satisfied by that default rather than by
+		// the released device maximum — both reviews caught the test that way.
+		await h.poll(1);
+		expect(
+			(h.instance as { headStates(): HeadState[] }).headStates()[0].maxPower,
+			'the export cap has to be the lowered one for this test to mean anything',
+		).to.equal(800);
 		head1.writes.length = 0;
 		await h.unload();
 		const released = head1.writes.find(w => 'IS' in w);

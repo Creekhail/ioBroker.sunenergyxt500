@@ -103,14 +103,26 @@ export interface HeadSetpoint {
  * Aggregate control law: total grid setpoint from the summed grid power and the
  * measured house grid power. Mirrors the single-head controller at N=1.
  *
+ * The two limits are separate and the clamp is asymmetric. Picking one of them by the
+ * sign of the *error* is wrong: a positive error only means "raise the setpoint", and
+ * while the plant is charging the result usually stays negative and still needs the
+ * charge limit. Clamping that to the export sum cut a −2000 W setpoint to −800 W on the
+ * first small correction.
+ *
  * @param totalGp Sum of the reported GP of all online heads (W, +feed-in).
  * @param gridPower House grid power normalized to ">0 = draw" (import).
  * @param gain Proportional gain.
- * @param sumMaxPower Sum of the online heads' limit for the direction in question (W).
+ * @param sumMaxExport Sum of the online heads' export limits (W), the positive bound.
+ * @param sumMaxCharge Sum of the online heads' charge limits (W), the negative bound.
  */
-export function computeTotalTarget(totalGp: number, gridPower: number, gain: number, sumMaxPower: number): number {
-	const limit = Math.abs(sumMaxPower);
-	return clamp(Math.round(totalGp + gain * gridPower), -limit, limit);
+export function computeTotalTarget(
+	totalGp: number,
+	gridPower: number,
+	gain: number,
+	sumMaxExport: number,
+	sumMaxCharge: number,
+): number {
+	return clamp(Math.round(totalGp + gain * gridPower), -Math.abs(sumMaxCharge), Math.abs(sumMaxExport));
 }
 
 /**
@@ -243,5 +255,8 @@ export function computeIsTarget(head: HeadState, gs: number): number {
 	if (head.soc <= head.socMin) {
 		target = Math.min(target, Math.max(head.pv, 0));
 	}
-	return Math.round(clamp(target, 0, Math.abs(head.maxInverter)));
+	// Lower bound 1, not 0: the device documents IS as 1..2400, and a manual write of 0
+	// is refused for that reason. The controller writing it anyway would be the adapter
+	// contradicting itself. 1 W is the vendor's own floor and means the same thing.
+	return Math.round(clamp(target, 1, Math.abs(head.maxInverter)));
 }
