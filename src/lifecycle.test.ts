@@ -50,6 +50,8 @@ interface FakeHead {
 	 * says it flakily; a dead head holds every connection open, so the peak counts them.
 	 */
 	peakConcurrent: number;
+	/** Optional counter shared with other heads, to observe concurrency across devices. */
+	tracker?: { open: number; peak: number };
 	/** While true the head answers nothing, so requests run into their deadline. */
 	dead: boolean;
 	/** Delay before answering, for testing budgets rather than timeouts. */
@@ -90,7 +92,16 @@ async function startHead(reported: Record<string, unknown> = {}): Promise<FakeHe
 		head.requests++;
 		openNow++;
 		head.peakConcurrent = Math.max(head.peakConcurrent, openNow);
-		res.on('close', () => openNow--);
+		if (head.tracker) {
+			head.tracker.open++;
+			head.tracker.peak = Math.max(head.tracker.peak, head.tracker.open);
+		}
+		res.on('close', () => {
+			openNow--;
+			if (head.tracker) {
+				head.tracker.open--;
+			}
+		});
 		if (head.dead) {
 			return; // leave the request hanging
 		}
@@ -377,6 +388,13 @@ describe('adapter lifecycle', function () {
 		expect(
 			head1.writes.some(w => w.GS === 0),
 			'shutdown must write GS=0',
+		).to.equal(true);
+		// "controlIs off" means the adapter does not touch IS — including on the way out.
+		// Without a claim on record there is nothing to hand back, and writing the maximum
+		// anyway would overwrite a limit the user set, at every single stop.
+		expect(
+			head1.writes.every(w => !('IS' in w)),
+			'and must not touch IS without a claim',
 		).to.equal(true);
 		expect(h.states['info.gsOwned']?.val).to.equal(false);
 	});
@@ -1774,38 +1792,216 @@ describe('adapter lifecycle: binding and limit ownership', function () {
 		}
 	});
 
-	it('settles the unconfigured hosts in one step, not three', async () => {
-		// Grid setpoint, meter binding and inverter limit can all point at a host that is
-		// gone. Waiting each one out in turn meant up to three request timeouts before
-		// the heads that *are* connected got their neutral setpoint — with the 8 s
-		// default, 24 s of an inherited setpoint running unwatched.
-		const gone = await startHead();
+	it('keeps the binding claim when the head does not report MM at all', async () => {
+		// A snapshot without MM is accepted as valid elsewhere, so it reaches this guard.
+		// Treating "not 1" as proof of "0" turns an unknown device state into a final
+		// release: the claim is dropped without any write, and the device keeps
+		// regulating itself from a meter nobody knows about any more.
+		const h = createHarness(
+			{
+				head1Host: `127.0.0.1:${head1.port}`,
+				controlMode: 'off',
+				pollInterval: 3600,
+				requestTimeout: 300,
+			},
+			{ 'info.meterBound': true, 'info.meterBoundHosts': JSON.stringify([`127.0.0.1:${head1.port}`]) },
+		);
+		head1.reported.MM = 1;
+		head1.dead = true; // the startup release cannot land
+		await h.ready();
+		head1.dead = false;
+		delete head1.reported.MM; // answers, but without the field
+		head1.writes.length = 0;
+		await h.poll(1);
+		expect(h.states['info.meterBound']?.val, 'an unknown MM is no proof of a release').to.equal(true);
+		// …and once it reports again, the release still happens.
+		head1.reported.MM = 1;
+		await h.poll(1);
+		expect(
+			head1.writes.some(w => w.MM === 0),
+			'the binding must still be released',
+		).to.equal(true);
+		expect(h.states['info.meterBound']?.val).to.equal(false);
+		await h.unload();
+	});
+
+	it('keeps releasing an old binding in device mode', async () => {
+		// Device mode maintains head 1's binding on purpose. Skipping the whole retry
+		// also skips every *other* host on the record — and those have no poll of their
+		// own, so a device that was unreachable at startup keeps its binding for good.
+		const old = await startHead({ MM: 1 });
 		try {
+			const h = createHarness(
+				{
+					head1Host: `127.0.0.1:${head1.port}`,
+					controlMode: 'device',
+					meterType: 'ecotracker',
+					meterId: '192.168.1.99',
+					pollInterval: 3600,
+					requestTimeout: 300,
+				},
+				{ 'info.meterBound': true, 'info.meterBoundHosts': JSON.stringify([`127.0.0.1:${old.port}`]) },
+			);
+			old.dead = true; // the startup release cannot reach it
+			await h.ready();
+			expect(
+				JSON.parse(String(h.states['info.meterBoundHosts']?.val)),
+				'both the new and the old host are on record',
+			).to.have.lengthOf(2);
+			old.dead = false; // the old device is back
+			old.writes.length = 0;
+			head1.writes.length = 0;
+			h.instance.lastMeterRetry = 0;
+			await h.poll(1);
+			expect(
+				old.writes.some(w => w.MM === 0),
+				'the old binding must be released',
+			).to.equal(true);
+			expect(
+				head1.writes.some(w => w.MM === 0),
+				'the maintained one must be left alone',
+			).to.equal(false);
+			expect(
+				JSON.parse(String(h.states['info.meterBoundHosts']?.val)),
+				'only the maintained host stays on record',
+			).to.deep.equal([`127.0.0.1:${head1.port}`]);
+			await h.unload();
+		} finally {
+			await old.close();
+		}
+	});
+
+	it('does not write after the shutdown when the read was already in flight', async () => {
+		// The guard sits before the read. A shutdown that happens while the answer is
+		// outstanding leaves the write unguarded, so the unload callback is not the
+		// boundary it is supposed to be — and the next instance may already be taking
+		// the device over.
+		const gone = await startHead({ MG: 800, IS: 0 });
+		try {
+			const h = createHarness(
+				{
+					head1Host: `127.0.0.1:${head1.port}`,
+					controlMode: 'off',
+					pollInterval: 3600,
+					requestTimeout: 3000,
+				},
+				{
+					'info.isOwned': true,
+					'info.isOwnedHosts': JSON.stringify([`127.0.0.1:${gone.port}`]),
+				},
+			);
+			gone.dead = true;
+			await h.ready(); // the startup attempt fails, the claim stays open
+			gone.dead = false;
+			gone.delayMs = 250; // the read is answered only after the shutdown
+			gone.writes.length = 0;
+			h.instance.lastIsRetry = 0;
+			const retry = h.instance.retryForeignIsRelease() as Promise<void>;
+			await new Promise(r => setTimeout(r, 60)); // the read is on its way
+			await h.unload();
+			await retry;
+			gone.delayMs = 0;
+			expect(
+				gone.writes.some(w => 'IS' in w),
+				'no limit may be written once the shutdown has run',
+			).to.equal(false);
+			expect(h.states['info.isOwned']?.val, 'and the claim has to stay open').to.equal(true);
+		} finally {
+			await gone.close();
+		}
+	});
+
+	it('checks the shutdown flag again after the read, not only before it', async () => {
+		// The test above is also satisfied by the unload tearing the client down, which
+		// depends on an in-flight request dying with its agent. This one isolates the
+		// check itself: the flag is set while the answer is outstanding, and nothing
+		// else is torn down.
+		const gone = await startHead({ MG: 800, IS: 0 });
+		try {
+			const h = createHarness(
+				{
+					head1Host: `127.0.0.1:${head1.port}`,
+					controlMode: 'off',
+					pollInterval: 3600,
+					requestTimeout: 3000,
+				},
+				{
+					'info.isOwned': true,
+					'info.isOwnedHosts': JSON.stringify([`127.0.0.1:${gone.port}`]),
+				},
+			);
+			gone.dead = true;
+			await h.ready();
+			gone.dead = false;
+			gone.delayMs = 250;
+			gone.writes.length = 0;
+			h.instance.lastIsRetry = 0;
+			const retry = h.instance.retryForeignIsRelease() as Promise<void>;
+			await new Promise(r => setTimeout(r, 60));
+			h.instance.stopping = true; // exactly what onUnload sets first, nothing else
+			await retry;
+			gone.delayMs = 0;
+			expect(
+				gone.writes.some(w => 'IS' in w),
+				'the write must not follow a shutdown that began during the read',
+			).to.equal(false);
+			await h.unload();
+		} finally {
+			await gone.close();
+		}
+	});
+
+	it('settles unconfigured hosts together, but one connection at a time per device', async () => {
+		// Grid setpoint, meter binding and inverter limit can all point at a host that is
+		// gone. Waiting each one out in turn cost up to three request timeouts before the
+		// connected heads got their neutral setpoint. Running them together must not turn
+		// into three simultaneous connections to one ESP32, whose socket table is tiny.
+		const goneA = await startHead();
+		const goneB = await startHead();
+		try {
+			const tracker = { open: 0, peak: 0 };
+			goneA.tracker = tracker;
+			goneB.tracker = tracker;
 			const h = createHarness(
 				{
 					head1Host: `127.0.0.1:${head1.port}`,
 					controlMode: 'controller',
 					gridPowerStateId: 'shelly.0.total',
 					pollInterval: 3600,
-					requestTimeout: 500,
+					// Generous on purpose: the overlap below is what is asserted, and a
+					// short deadline would make it depend on scheduling jitter under load.
+					requestTimeout: 1500,
 				},
 				{
 					'info.gsOwned': true,
-					'info.gsOwnedHosts': JSON.stringify([`127.0.0.1:${gone.port}`]),
+					'info.gsOwnedHosts': JSON.stringify([`127.0.0.1:${goneA.port}`]),
 					'info.isOwned': true,
-					'info.isOwnedHosts': JSON.stringify([`127.0.0.1:${gone.port}`]),
+					'info.isOwnedHosts': JSON.stringify([`127.0.0.1:${goneA.port}`]),
 					'info.meterBound': true,
-					'info.meterBoundHosts': JSON.stringify([`127.0.0.1:${gone.port}`]),
+					'info.meterBoundHosts': JSON.stringify([`127.0.0.1:${goneB.port}`]),
 				},
 			);
-			gone.dead = true; // holds every connection open for its full timeout
+			goneA.dead = true; // both hold their connections open for the full timeout
+			goneB.dead = true;
 			await h.ready();
-			expect(gone.requests, 'all three jobs must reach it').to.be.greaterThan(2);
-			expect(gone.peakConcurrent, 'and they must wait together, not one after another').to.be.greaterThan(1);
-			gone.dead = false;
+			// One each: host A carries two jobs, but they share a client, so the second
+			// waits — and the deadline covers queued time, so on a dead host it expires
+			// before it opens anything. That is the api.ts contract, and it is why the
+			// per-device peak below can be asserted exactly.
+			expect(goneA.requests, 'host A must be reached').to.be.greaterThan(0);
+			// Exactly one: the binding job runs once, inside the block above. Ignoring
+			// `deferForeignRelease` would run it again beforehand, sequentially — two
+			// requests and one extra timeout at every start, with every test still green.
+			expect(goneB.requests, 'the binding job must run once, not twice').to.equal(1);
+			expect(goneA.peakConcurrent, 'never two connections to one device').to.equal(1);
+			expect(goneB.peakConcurrent, 'never two connections to one device').to.equal(1);
+			expect(tracker.peak, 'but different devices are contacted together').to.be.greaterThan(1);
+			goneA.dead = false;
+			goneB.dead = false;
 			await h.unload();
 		} finally {
-			await gone.close();
+			await goneA.close();
+			await goneB.close();
 		}
 	});
 

@@ -796,7 +796,21 @@ export class MultiHeadController {
 		for (const h of heads) {
 			// Without SoC data there is nothing to judge, and marking the head evaluated
 			// on a placeholder would spend the single look on a value we invented.
-			if (!h.controllable || this.socEvaluated.has(h.index)) {
+			if (!h.controllable) {
+				continue;
+			}
+			// A charge that has moved clear of a band lifts the block on sight. Waiting for
+			// the split to hand out a non-zero setpoint misses the case where there is
+			// nothing to hand out: with the house on target every head gets 0, so one that
+			// charged past its floor meanwhile would stay blocked — and once its charge
+			// drifts back into the band, for good.
+			if (!inDischargeBand(h) && h.soc > h.socMin) {
+				this.saturatedDischarge.delete(h.index);
+			}
+			if (!inChargeBand(h) && h.soc < h.socMax) {
+				this.saturatedCharge.delete(h.index);
+			}
+			if (this.socEvaluated.has(h.index)) {
 				continue;
 			}
 			this.socEvaluated.add(h.index);

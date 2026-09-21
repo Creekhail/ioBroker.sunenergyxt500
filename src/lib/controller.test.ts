@@ -1933,6 +1933,37 @@ describe('MultiHeadController saturation seeding, edges', () => {
 		).to.equal(true);
 	});
 
+	it('releases the memory on sight, not only when a setpoint is issued', async () => {
+		// The memory is cleared when the split hands the head a non-zero setpoint. With
+		// no grid demand it hands out zeros, so a head that charges clear of its floor
+		// while the house sits on target keeps the block — and once its charge drifts
+		// back into the band it is stuck there, through the night.
+		const heads = [head({ index: 1, soc: 6, socMin: 5, socHysteresisDischarge: 5 })];
+		const { hooks, writes } = mockHooks(heads);
+		const ctrl = new MultiHeadController(mockAdapter().adapter, hooks, 'x.y.z', cfg());
+		await ctrl.start();
+		const at = sampleClock();
+		await ctrl.onGridPower(500, at()); // seeded as blocked
+		const internal = ctrl as unknown as { saturatedDischarge: Set<number> };
+		expect([...internal.saturatedDischarge]).to.deep.equal([1]);
+
+		heads[0].soc = 11; // PV charged it clear of socMin + SI1 …
+		ageWrite(ctrl, 10000);
+		await ctrl.onGridPower(0, at()); // … while the house is on target, so GS stays 0
+		expect([...internal.saturatedDischarge], 'the block must lift on the observation').to.deep.equal([]);
+
+		heads[0].soc = 9; // local load pulls it back into the band, never to the floor
+		writes.length = 0;
+		for (let i = 0; i < 3; i++) {
+			ageWrite(ctrl, 10000);
+			await ctrl.onGridPower(500, at());
+		}
+		expect(
+			writes.some(w => w.gs > 0),
+			'and the head must be usable again',
+		).to.equal(true);
+	});
+
 	it('says in the log when it holds a head back', async () => {
 		// The assumption costs real capacity for a while, and it is the answer to "why
 		// is my storage idle since the restart?" — debug would hide it from exactly the

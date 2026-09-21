@@ -135,6 +135,15 @@ class Sunenergyxt500 extends utils.Adapter {
   /** Serialises read-modify-write updates of the inverter-limit claim. */
   isClaimQueue = Promise.resolve();
   /**
+   * Clients for hosts that are not configured heads, keyed by hostKey().
+   *
+   * One per host rather than one per job: `maxSockets: 1` serialises a client, not
+   * a device, and the start-up jobs run together — three of them would otherwise
+   * open three connections to the same ESP32, whose socket table is very small.
+   * Held only while those jobs run; see releaseForeignApis().
+   */
+  foreignApis = /* @__PURE__ */ new Map();
+  /**
    * Consecutive failed cleanup retries per host, so a host that is gone for good is
    * reported rather than retried in silence forever.
    */
@@ -262,6 +271,7 @@ class Sunenergyxt500 extends utils.Adapter {
     this.log.info(
       `Control mode: ${this.controlMode}. Polling ${this.heads.length} head(s) every ${this.pollIntervalMs / 1e3}s${this.heads.length > 1 ? ", staggered" : ""}.`
     );
+    this.releaseForeignApis();
     this.lastForeignRetry = this.lastMeterRetry = this.lastIsRetry = Date.now();
     this.startPolling();
   }
@@ -838,6 +848,29 @@ class Sunenergyxt500 extends utils.Adapter {
     await this.setState("info.meterBoundHosts", { val: JSON.stringify(unique), ack: true });
   }
   /**
+   * A client for a host with no configured head, shared with any job running at
+   * the same moment so requests to one device queue behind each other.
+   *
+   * @param host the address to talk to
+   * @param timeoutMs request deadline
+   */
+  foreignApi(host, timeoutMs) {
+    const key = (0, import_values.hostKey)(host);
+    let api = this.foreignApis.get(key);
+    if (!api) {
+      api = new import_api.SunEnergyXtApi(host, timeoutMs, this);
+      this.foreignApis.set(key, api);
+    }
+    return api;
+  }
+  /** Closes every shared throwaway client, once the jobs using them are done. */
+  releaseForeignApis() {
+    for (const api of this.foreignApis.values()) {
+      api.destroy();
+    }
+    this.foreignApis.clear();
+  }
+  /**
    * Heads a binding of ours sits on.
    *
    * Falls back to head 1 when only the old boolean exists — that is what an install
@@ -880,7 +913,7 @@ class Sunenergyxt500 extends utils.Adapter {
       stale.map(async (host) => {
         var _a;
         const known = this.heads.find((x) => (0, import_values.hostKey)(x.host) === (0, import_values.hostKey)(host));
-        const api = (_a = known == null ? void 0 : known.api) != null ? _a : new import_api.SunEnergyXtApi(host, timeoutMs, this);
+        const api = (_a = known == null ? void 0 : known.api) != null ? _a : this.foreignApi(host, timeoutMs);
         try {
           await api.write({ MM: 0, MD: "" });
           this.meterRetryFailures.delete((0, import_values.hostKey)(host));
@@ -894,10 +927,6 @@ class Sunenergyxt500 extends utils.Adapter {
             (0, import_values.errMsg)(e)
           );
           left.push(host);
-        } finally {
-          if (!known) {
-            api.destroy();
-          }
         }
       })
     );
@@ -978,12 +1007,13 @@ class Sunenergyxt500 extends utils.Adapter {
       if (!bound.some((host) => (0, import_values.hostKey)(host) === (0, import_values.hostKey)(h.host))) {
         return;
       }
-      if ((0, import_values.num)(data.MM) === 1) {
+      const mm2 = (0, import_values.num)(data.MM);
+      if (mm2 === 1) {
         if (await this.writeHead(h, { MM: 0, MD: "" }, "off-cleanup retry")) {
           await this.setMeterBoundHosts(bound.filter((x) => (0, import_values.hostKey)(x) !== (0, import_values.hostKey)(h.host)));
           this.log.info(`Head ${h.index}: released the adapter-managed meter binding (control mode is off).`);
         }
-      } else {
+      } else if (mm2 === 0) {
         await this.setMeterBoundHosts(bound.filter((x) => (0, import_values.hostKey)(x) !== (0, import_values.hostKey)(h.host)));
       }
       return;
@@ -1229,6 +1259,7 @@ class Sunenergyxt500 extends utils.Adapter {
         for (const h of this.heads) {
           h.api.destroy();
         }
+        this.releaseForeignApis();
         callback();
       }
     })();
@@ -1323,7 +1354,7 @@ class Sunenergyxt500 extends utils.Adapter {
     const failed = [];
     await Promise.all(
       gone.map(async (host) => {
-        const api = new import_api.SunEnergyXtApi(host, timeoutMs, this);
+        const api = this.foreignApi(host, timeoutMs);
         try {
           await api.write({ GS: 0 });
           this.log.info(`Head ${host}: GS neutralized to 0 (removed from configuration).`);
@@ -1332,8 +1363,6 @@ class Sunenergyxt500 extends utils.Adapter {
           this.log.warn(`Head ${host}: could not be neutralised: ${(0, import_values.errMsg)(e)}`);
           this.foreignRetryFailures.set((0, import_values.hostKey)(host), 1);
           failed.push(host);
-        } finally {
-          api.destroy();
         }
       })
     );
@@ -1359,7 +1388,7 @@ class Sunenergyxt500 extends utils.Adapter {
       hosts.map(async (host) => {
         var _a;
         const known = this.heads.find((x) => (0, import_values.hostKey)(x.host) === (0, import_values.hostKey)(host));
-        const api = (_a = known == null ? void 0 : known.api) != null ? _a : new import_api.SunEnergyXtApi(host, timeoutMs, this);
+        const api = (_a = known == null ? void 0 : known.api) != null ? _a : this.foreignApi(host, timeoutMs);
         try {
           await api.write({ GS: 0 });
           this.log.info(`Head ${host}: GS neutralized to 0 (ownership cleanup).`);
@@ -1369,10 +1398,6 @@ class Sunenergyxt500 extends utils.Adapter {
           this.log.warn(`Head ${host}: ownership cleanup failed: ${(0, import_values.errMsg)(e)}`);
           this.foreignRetryFailures.set((0, import_values.hostKey)(host), 1);
           return false;
-        } finally {
-          if (!known) {
-            api.destroy();
-          }
         }
       })
     );
@@ -1443,7 +1468,7 @@ class Sunenergyxt500 extends utils.Adapter {
     const timeoutMs = Math.max(1e3, Math.round((0, import_states.cfgNum)(this.config.requestTimeout, 8e3)));
     await Promise.all(
       pending.map(async (host) => {
-        const api = new import_api.SunEnergyXtApi(host, timeoutMs, this);
+        const api = this.foreignApi(host, timeoutMs);
         try {
           await api.write({ GS: 0 });
           this.log.info(`Head ${host}: GS neutralized to 0 (cleanup retry, no longer configured).`);
@@ -1457,11 +1482,10 @@ class Sunenergyxt500 extends utils.Adapter {
             "info.gsOwnedHosts",
             (0, import_values.errMsg)(e)
           );
-        } finally {
-          api.destroy();
         }
       })
     );
+    this.releaseForeignApis();
     this.pendingForeignHosts = this.pendingForeignHosts.filter((h) => !this.gsCleanupDone.has((0, import_values.hostKey)(h)));
     if (this.gsCleanupPending) {
       await this.finishCleanupIfDone();
@@ -1496,21 +1520,29 @@ class Sunenergyxt500 extends utils.Adapter {
     }
     this.lastIsRetry = Date.now();
     await this.releaseForeignIs(gone);
+    this.releaseForeignApis();
   }
   async retryForeignMeterRelease() {
-    if (this.stopping || this.controlMode === "device") {
+    var _a, _b;
+    if (this.stopping) {
       return;
     }
+    const keep = this.controlMode === "device" ? (_b = (_a = this.heads[0]) == null ? void 0 : _a.host) != null ? _b : "" : "";
     const bound = await this.meterBoundHosts();
     if (!bound.length || Date.now() - this.lastMeterRetry < FOREIGN_RETRY_INTERVAL_MS) {
       return;
     }
-    const configured = new Set(this.heads.map((x) => (0, import_values.hostKey)(x.host)));
-    if (!bound.some((host) => !configured.has((0, import_values.hostKey)(host)))) {
+    const settled = new Set(this.heads.map((x) => (0, import_values.hostKey)(x.host)));
+    if (keep) {
+      settled.clear();
+      settled.add((0, import_values.hostKey)(keep));
+    }
+    if (!bound.some((host) => !settled.has((0, import_values.hostKey)(host)))) {
       return;
     }
     this.lastMeterRetry = Date.now();
-    await this.releaseMeterBindings();
+    await this.releaseMeterBindings(keep);
+    this.releaseForeignApis();
   }
   /**
    * Picks up an inverter limit a previous run left throttled.
@@ -1564,9 +1596,12 @@ class Sunenergyxt500 extends utils.Adapter {
     await Promise.all(
       hosts.map(async (host) => {
         var _a;
-        const api = new import_api.SunEnergyXtApi(host, timeoutMs, this);
+        const api = this.foreignApi(host, timeoutMs);
         try {
           const data = (await api.read()).reported;
+          if (this.stopping) {
+            return;
+          }
           const max = Math.round(Math.abs((_a = (0, import_values.num)(data.MG)) != null ? _a : (0, import_values.fallbackMaxPower)(data)));
           await api.write({ IS: max });
           this.isRetryFailures.delete((0, import_values.hostKey)(host));
@@ -1580,8 +1615,6 @@ class Sunenergyxt500 extends utils.Adapter {
             "info.isOwnedHosts",
             (0, import_values.errMsg)(e)
           );
-        } finally {
-          api.destroy();
         }
       })
     );
@@ -1629,7 +1662,11 @@ class Sunenergyxt500 extends utils.Adapter {
       return;
     }
     try {
-      const { payload, releaseIs } = this.neutralPayload(h, await this.isOwnedHosts());
+      const claimed = await this.isOwnedHosts();
+      if (this.stopping) {
+        return;
+      }
+      const { payload, releaseIs } = this.neutralPayload(h, claimed);
       await h.api.write(payload);
       this.log.info(`Head ${h.index}: GS neutralized to 0 (ownership cleanup, retry).`);
       this.gsCleanupDone.add((0, import_values.hostKey)(h.host));

@@ -572,7 +572,16 @@ class MultiHeadController {
    */
   seedSaturation(heads) {
     for (const h of heads) {
-      if (!h.controllable || this.socEvaluated.has(h.index)) {
+      if (!h.controllable) {
+        continue;
+      }
+      if (!(0, import_split.inDischargeBand)(h) && h.soc > h.socMin) {
+        this.saturatedDischarge.delete(h.index);
+      }
+      if (!(0, import_split.inChargeBand)(h) && h.soc < h.socMax) {
+        this.saturatedCharge.delete(h.index);
+      }
+      if (this.socEvaluated.has(h.index)) {
         continue;
       }
       this.socEvaluated.add(h.index);
