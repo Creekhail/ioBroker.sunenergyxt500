@@ -199,7 +199,7 @@ Die Änderungshistorie wird im Haupt-[README.md](README.md#changelog) gepflegt.
 ## Lizenz
 MIT-Lizenz
 
-Copyright (c) 2026 Marcus Bortel (Creekhail)
+Copyright (c) 2026 Marcus Bortel (Creekhail) <marcus@bortel.de>
 
 Die Erlaubnis wird hiermit unentgeltlich jeder Person erteilt, die eine Kopie dieser Software und der zugehörigen Dokumentationsdateien (die „Software") erhält, mit der Software uneingeschränkt zu handeln, einschließlich und ohne Einschränkung der Rechte, sie zu nutzen, zu kopieren, zu ändern, zusammenzuführen, zu veröffentlichen, zu verbreiten, zu unterlizenzieren und/oder zu verkaufen, und Personen, denen die Software überlassen wird, dies zu gestatten, unter den folgenden Bedingungen:
 

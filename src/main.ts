@@ -405,14 +405,18 @@ class Sunenergyxt500 extends utils.Adapter {
 		};
 
 		// The heads container must be a folder: a device below a channel violates the
-		// required device→channel→state hierarchy. setObject (not NotExists) also
-		// migrates installations where it was created as a channel before.
+		// required device→channel→state hierarchy. Create-then-extend like ensure() does,
+		// which also migrates installations where it was created as a channel before —
+		// extendObject merges deeply, so the type is overwritten while anything the owner
+		// added survives.
 		desired.add('heads');
-		await this.setObject('heads', {
+		const headsFolder: ioBroker.SettableObject = {
 			type: 'folder',
 			common: { name: { en: 'Storage heads', de: 'Speicherköpfe' } },
 			native: { ...OWNER_MARK },
-		});
+		};
+		await this.setObjectNotExistsAsync('heads', headsFolder);
+		await this.extendObject('heads', headsFolder);
 
 		for (const h of this.heads) {
 			const base = `heads.${h.index}`;

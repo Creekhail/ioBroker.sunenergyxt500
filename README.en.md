@@ -200,7 +200,7 @@ The changelog is maintained in the main [README.md](README.md#changelog).
 ## License
 MIT License
 
-Copyright (c) 2026 Marcus Bortel (Creekhail)
+Copyright (c) 2026 Marcus Bortel (Creekhail) <marcus@bortel.de>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

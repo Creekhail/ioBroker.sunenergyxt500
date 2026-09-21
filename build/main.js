@@ -256,11 +256,13 @@ class Sunenergyxt500 extends utils.Adapter {
       await this.extendObject(id, { common, native: { ...OWNER_MARK } });
     };
     desired.add("heads");
-    await this.setObject("heads", {
+    const headsFolder = {
       type: "folder",
       common: { name: { en: "Storage heads", de: "Speicherk\xF6pfe" } },
       native: { ...OWNER_MARK }
-    });
+    };
+    await this.setObjectNotExistsAsync("heads", headsFolder);
+    await this.extendObject("heads", headsFolder);
     for (const h of this.heads) {
       const base = `heads.${h.index}`;
       const name = h.label || `Head ${h.index}`;

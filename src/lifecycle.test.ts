@@ -747,6 +747,15 @@ describe('adapter lifecycle: field mapping', function () {
 		});
 	}
 
+	it('migrates a heads container that an older version made a channel', async () => {
+		// 0.1.x created it as a channel, which violates device→channel→state. The
+		// create-then-extend has to overwrite the type, not merely leave the old object.
+		const h = monitorOnly();
+		h.objects.heads = { type: 'channel', common: { name: 'Storage heads' }, native: {} };
+		await h.ready();
+		expect(h.objects.heads?.type).to.equal('folder');
+	});
+
 	it('publishes every field of the documented response where it belongs', async () => {
 		// The gap every review named: each field is mapped in exactly one place, so a
 		// transposed pair (GP into BP, a sign, a scale) passes every other test in here.
