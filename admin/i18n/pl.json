@@ -34,7 +34,7 @@
 	"Foreign state holding the grid power of your house meter (e.g. a Shelly Pro 3EM total). Convention: >0 = grid draw, <0 = feed-in.": "Państwo obce przechowujące moc sieciową licznika domowego (np. suma Shelly Pro 3EM). Konwencja: >0 = pobór sieci, <0 = zasilanie.",
 	"Fraction of the grid deviation corrected per step: 0.3 = smooth (several steps), 1.0 = full correction in one step. Values above 1 can overshoot.": "Część odchylenia sieci korygowana w jednym kroku: 0,3 = łagodnie (kilka kroków), 1,0 = pełna korekta w jednym kroku. Wartości powyżej 1 mogą powodować przeregulowanie.",
 	"GS303": "GS303",
-	"Gain": "Osiągać",
+	"Gain": "Wzmocnienie",
 	"Grid deviations below this are not corrected. 0 = correct everything; larger values keep the controller quiet but leave a small permanent deviation.": "Odchylenia sieci poniżej tej wartości nie są korygowane. 0 = koryguj wszystko; większe wartości utrzymują regulator w spokoju, ale pozostawiają małe stałe odchylenie.",
 	"Grid-power source state": "Stan źródła zasilania sieciowego",
 	"HBZ": "HBZ",

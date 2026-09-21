@@ -34,7 +34,7 @@
 	"Foreign state holding the grid power of your house meter (e.g. a Shelly Pro 3EM total). Convention: >0 = grid draw, <0 = feed-in.": "Buitenlandse staat die de netstroom van uw huismeter beheert (bijvoorbeeld een Shelly Pro 3EM-totaal). Conventie: >0 = nettekening, <0 = teruglevering.",
 	"Fraction of the grid deviation corrected per step: 0.3 = smooth (several steps), 1.0 = full correction in one step. Values above 1 can overshoot.": "Aandeel van de netafwijking dat per stap wordt gecorrigeerd: 0,3 = soepel (meerdere stappen), 1,0 = volledige correctie in één stap. Waarden boven 1 kunnen doorschieten.",
 	"GS303": "GS303",
-	"Gain": "Verdienen",
+	"Gain": "Versterking",
 	"Grid deviations below this are not corrected. 0 = correct everything; larger values keep the controller quiet but leave a small permanent deviation.": "Netafwijkingen hieronder worden niet gecorrigeerd. 0 = alles corrigeren; grotere waarden houden de regelaar rustig, maar laten een kleine permanente afwijking staan.",
 	"Grid-power source state": "Status van de netstroombron",
 	"HBZ": "HBZ",

@@ -254,6 +254,26 @@ describe('Tasmota subtype list', () => {
 		}
 	});
 
+	it('keeps product names intact in every translated label', () => {
+		// Same failure, one level up: the meter *type* is the first thing a user picks, and
+		// the translation had turned "Shelly 3EM" into "Шелли 3ЕМ" and, in Chinese, into
+		// "Shirley 3EM". A name that appears in the English label must survive into every
+		// other language, however the rest of the sentence is phrased.
+		const NAMES = ['Shelly', 'EcoTracker', 'Tasmota', 'BitShake', 'ioBroker', 'SunEnergyXT'];
+		const dir = path.join(__dirname, '..', 'admin', 'i18n');
+		const en = JSON.parse(fs.readFileSync(path.join(dir, 'en.json'), 'utf8')) as Record<string, string>;
+		for (const file of fs.readdirSync(dir)) {
+			const dict = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8')) as Record<string, string>;
+			for (const key of Object.keys(en)) {
+				for (const name of NAMES) {
+					if (key.includes(name) && dict[key]) {
+						expect(dict[key], `${file}: "${name}" lost in "${key}"`).to.contain(name);
+					}
+				}
+			}
+		}
+	});
+
 	it('keeps the model names untranslated in every language', () => {
 		// They are names, not words, and `npm run translate` does not know that: it turned
 		// Q3A into "Pytanie 3A", SGM into a Chinese company and eBZ into a chemical. A user
