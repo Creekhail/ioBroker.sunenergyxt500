@@ -839,6 +839,90 @@ describe('adapter lifecycle: binding and limit ownership', function () {
 		await head1.close();
 	});
 
+	it('records the meter binding it established in device mode', async () => {
+		const h = createHarness({
+			head1Host: `127.0.0.1:${head1.port}`,
+			controlMode: 'device',
+			meterType: 'ecotracker',
+			meterId: '192.168.1.99',
+			pollInterval: 3600,
+			requestTimeout: 2000,
+		});
+		await h.ready();
+		expect(
+			head1.writes.some(w => w.MM === 1),
+			'device mode binds the meter',
+		).to.equal(true);
+		expect(h.states['info.meterBound']?.val, 'and remembers that it did').to.equal(true);
+	});
+
+	it('releases its own meter binding when the mode is switched to off', async () => {
+		// The binding outlives the adapter: MM/MD stay on the device until something
+		// clears them. An owner who switches the adapter off would otherwise keep a
+		// device regulating against a meter the adapter configured and no longer serves.
+		const h = createHarness(
+			{
+				head1Host: `127.0.0.1:${head1.port}`,
+				controlMode: 'off',
+				pollInterval: 3600,
+				requestTimeout: 2000,
+			},
+			{ 'info.meterBound': true }, // an earlier run in device mode
+		);
+		await h.ready();
+		expect(head1.writes).to.deep.equal([{ MM: 0, MD: '' }]);
+		expect(h.states['info.meterBound']?.val, 'the record is cleared once it landed').to.equal(false);
+	});
+
+	it('keeps the record when the release did not reach the head', async () => {
+		// The one place this differs from the version that shipped: a release that failed
+		// leaves the flag standing, so the next start tries again. No retry loop needed —
+		// the mode is enforced on every start anyway.
+		const h = createHarness(
+			{
+				head1Host: `127.0.0.1:${head1.port}`,
+				controlMode: 'off',
+				pollInterval: 3600,
+				requestTimeout: 300,
+			},
+			{ 'info.meterBound': true },
+		);
+		head1.dead = true;
+		await h.ready();
+		expect(h.states['info.meterBound']?.val, 'an unconfirmed release is not a release').to.equal(true);
+	});
+
+	it('drops the record when controller mode clears the binding', async () => {
+		// Controller mode writes MM=0/MD='' to every head, so the binding is gone. Leaving
+		// the flag set would have a later switch to off release a binding nobody holds.
+		const h = createHarness(
+			{
+				head1Host: `127.0.0.1:${head1.port}`,
+				controlMode: 'controller',
+				gridPowerStateId: 'shelly.0.total',
+				pollInterval: 3600,
+				requestTimeout: 2000,
+			},
+			{ 'info.meterBound': true },
+		);
+		await h.ready();
+		expect(h.states['info.meterBound']?.val).to.equal(false);
+	});
+
+	it('leaves a binding the adapter never made alone', async () => {
+		// Off mode means hands off. A binding the owner set up in the app is theirs, and
+		// clearing it would stop a device that was regulating perfectly well without us.
+		const h = createHarness({
+			head1Host: `127.0.0.1:${head1.port}`,
+			controlMode: 'off',
+			pollInterval: 3600,
+			requestTimeout: 2000,
+		});
+		head1.reported.MM = 1; // bound, but not by this adapter
+		await h.ready();
+		expect(head1.writes, 'off mode writes nothing it did not set itself').to.deep.equal([]);
+	});
+
 	it('does not enforce the mode on a head after the shutdown', async () => {
 		// A poll already in flight resumes after unload; its mode guard writes MM/MD to a
 		// device the adapter has just let go of.

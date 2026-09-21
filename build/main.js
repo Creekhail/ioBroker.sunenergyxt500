@@ -326,6 +326,17 @@ class Sunenergyxt500 extends utils.Adapter {
       write: false,
       def: ""
     });
+    await ensure("info.meterBound", {
+      name: loc({
+        en: "Meter bound by adapter (device mode)",
+        de: "Z\xE4hler vom Adapter gebunden (Ger\xE4te-Modus)"
+      }),
+      type: "boolean",
+      role: "indicator",
+      read: true,
+      write: false,
+      def: false
+    });
     await ensure("info.gsOwned", {
       name: loc({
         en: "Adapter holds a grid setpoint on the heads",
@@ -617,12 +628,20 @@ class Sunenergyxt500 extends utils.Adapter {
       for (const h of this.heads) {
         await this.writeHead(h, { MM: 0, MD: "" }, reason);
       }
+      await this.setMeterBoundByAdapter(false);
     } else if (this.controlMode === "device") {
       const h = this.heads[0];
       if (!h || !this.meterMd) {
         return;
       }
       this.meterMdPending = !await this.writeHead(h, { MM: 1, MD: this.meterMd }, reason);
+      await this.setMeterBoundByAdapter(true);
+    } else if (await this.isMeterBoundByAdapter()) {
+      const h = this.heads[0];
+      if (h && await this.writeHead(h, { MM: 0, MD: "" }, "off-cleanup")) {
+        await this.setMeterBoundByAdapter(false);
+        this.log.info("Releasing the adapter-managed meter binding (control mode is now off).");
+      }
     }
   }
   /**
@@ -648,6 +667,22 @@ class Sunenergyxt500 extends utils.Adapter {
       this.log.warn(`Head ${h.index}: could not apply ${this.controlMode} mode: ${(0, import_values.errMsg)(e)}`);
       return false;
     }
+  }
+  /** Whether the adapter currently holds a device-native meter binding it created. */
+  async isMeterBoundByAdapter() {
+    const st = await this.getStateAsync("info.meterBound");
+    return !!(st == null ? void 0 : st.val);
+  }
+  /**
+   * Persists whether the adapter holds a meter binding (device mode).
+   *
+   * Survives restarts, but unlike info.gsOwned it needs no retry of its own: a release
+   * that did not land leaves the flag set, and the next start runs enforceMode again.
+   *
+   * @param bound true while the adapter-created binding is active on the device
+   */
+  async setMeterBoundByAdapter(bound) {
+    await this.setState("info.meterBound", { val: bound, ack: true });
   }
   /**
    * Whether the adapter left a grid setpoint on the heads that nothing is watching.

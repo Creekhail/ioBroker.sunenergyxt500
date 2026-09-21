@@ -478,6 +478,17 @@ class Sunenergyxt500 extends utils.Adapter {
 			write: false,
 			def: '',
 		});
+		await ensure('info.meterBound', {
+			name: loc({
+				en: 'Meter bound by adapter (device mode)',
+				de: 'Zähler vom Adapter gebunden (Geräte-Modus)',
+			}),
+			type: 'boolean',
+			role: 'indicator',
+			read: true,
+			write: false,
+			def: false,
+		});
 		await ensure('info.gsOwned', {
 			name: loc({
 				en: 'Adapter holds a grid setpoint on the heads',
@@ -808,12 +819,22 @@ class Sunenergyxt500 extends utils.Adapter {
 			// Settling a binding on a device that is no longer configured can take a full
 			// timeout, and nothing here needs the result — the startup runs it alongside the
 			// other unconfigured-host jobs.
+			await this.setMeterBoundByAdapter(false);
 		} else if (this.controlMode === 'device') {
 			const h = this.heads[0];
 			if (!h || !this.meterMd) {
 				return; // misconfigured — already warned, leave the device alone
 			}
 			this.meterMdPending = !(await this.writeHead(h, { MM: 1, MD: this.meterMd }, reason));
+			await this.setMeterBoundByAdapter(true);
+		} else if (await this.isMeterBoundByAdapter()) {
+			// Off mode releases a binding THIS adapter established in device mode, and only
+			// that one: a binding the owner made in the app is theirs and stays.
+			const h = this.heads[0];
+			if (h && (await this.writeHead(h, { MM: 0, MD: '' }, 'off-cleanup'))) {
+				await this.setMeterBoundByAdapter(false);
+				this.log.info('Releasing the adapter-managed meter binding (control mode is now off).');
+			}
 		}
 	}
 
@@ -846,6 +867,24 @@ class Sunenergyxt500 extends utils.Adapter {
 			this.log.warn(`Head ${h.index}: could not apply ${this.controlMode} mode: ${errMsg(e)}`);
 			return false;
 		}
+	}
+
+	/** Whether the adapter currently holds a device-native meter binding it created. */
+	private async isMeterBoundByAdapter(): Promise<boolean> {
+		const st = await this.getStateAsync('info.meterBound');
+		return !!st?.val;
+	}
+
+	/**
+	 * Persists whether the adapter holds a meter binding (device mode).
+	 *
+	 * Survives restarts, but unlike info.gsOwned it needs no retry of its own: a release
+	 * that did not land leaves the flag set, and the next start runs enforceMode again.
+	 *
+	 * @param bound true while the adapter-created binding is active on the device
+	 */
+	private async setMeterBoundByAdapter(bound: boolean): Promise<void> {
+		await this.setState('info.meterBound', { val: bound, ack: true });
 	}
 
 	/**
