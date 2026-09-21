@@ -248,8 +248,17 @@ function createHarness(config: Record<string, unknown>, presetStates: Record<str
 			return Promise.resolve();
 		}
 		public extendObjectAsync(id: string, part: any): Promise<void> {
-			const cur = objects[norm(id)] ?? { native: {} };
-			objects[norm(id)] = { ...cur, ...part, native: { ...(cur.native ?? {}), ...(part.native ?? {}) } };
+			// js-controller merges deeply (`extend(true, oldObj, obj)`), so a partial
+			// { common: { max } } keeps name, role and unit. A shallow merge here would
+			// replace common wholesale and hide exactly the bug that would cause.
+			const deep = (base: any, patch: any): any => {
+				const out = { ...base };
+				for (const [k, v] of Object.entries(patch)) {
+					out[k] = v && typeof v === 'object' && !Array.isArray(v) ? deep(base?.[k] ?? {}, v) : v;
+				}
+				return out;
+			};
+			objects[norm(id)] = deep(objects[norm(id)] ?? { native: {} }, part);
 			return Promise.resolve();
 		}
 		public extendObject = this.extendObjectAsync;
@@ -794,6 +803,14 @@ describe('adapter lifecycle: field mapping', function () {
 			h.objects['heads.1.control.IS']?.common?.max,
 			'while the inverter limit stays at the device maximum',
 		).to.equal(2400);
+		// Narrowing the bound must not strip the rest of the definition off the object.
+		const gs = h.objects['heads.1.control.GS']?.common;
+		expect({ min: gs?.min, unit: gs?.unit, role: gs?.role, write: gs?.write }).to.deep.equal({
+			min: -2400,
+			unit: 'W',
+			role: 'level',
+			write: true,
+		});
 	});
 });
 
