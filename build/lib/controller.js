@@ -188,7 +188,7 @@ class MultiHeadController {
    * The saturation memory above records what *this* run observed. After a restart —
    * or after forgetHead() dropped a head that went away and came back — it is empty,
    * so a head whose charge sits inside the device's hysteresis band looks free to
-   * use. It is not: the device refuses until the band is cleared. See seedSaturation().
+   * use. It is not: the device refuses until the band is cleared. See trackSaturation().
    */
   socEvaluated = /* @__PURE__ */ new Set();
   /**
@@ -362,7 +362,7 @@ class MultiHeadController {
       totalTarget = Math.round(Math.max(lo, Math.min(hi, totalTarget)));
     }
     await this.adapter.setStateChangedAsync("controller.totalTarget", totalTarget, true);
-    this.seedSaturation(heads);
+    this.trackSaturation(heads);
     const charging = totalTarget < 0;
     const memory = charging ? this.saturatedCharge : this.saturatedDischarge;
     const setpoints = (0, import_split.splitTarget)(totalTarget, heads, memory);
@@ -548,7 +548,8 @@ class MultiHeadController {
     }
   }
   /**
-   * Assumes a head found inside a SoC hysteresis band is still held there.
+   * Keeps the per-direction saturation memory in step with each head's charge, and
+   * makes the conservative assumption for a head first seen inside a band.
    *
    * The saturation memory only knows what this run saw. After a restart, or after
    * forgetHead() dropped a head that came back, it is empty — and a head sitting at,
@@ -570,15 +571,19 @@ class MultiHeadController {
    *
    * @param heads the heads taking part in this cycle
    */
-  seedSaturation(heads) {
+  trackSaturation(heads) {
     for (const h of heads) {
       if (!h.controllable) {
         continue;
       }
-      if (!(0, import_split.inDischargeBand)(h) && h.soc > h.socMin) {
+      if (h.soc <= h.socMin) {
+        this.saturatedDischarge.add(h.index);
+      } else if (!(0, import_split.inDischargeBand)(h)) {
         this.saturatedDischarge.delete(h.index);
       }
-      if (!(0, import_split.inChargeBand)(h) && h.soc < h.socMax) {
+      if (h.soc >= h.socMax) {
+        this.saturatedCharge.add(h.index);
+      } else if (!(0, import_split.inChargeBand)(h)) {
         this.saturatedCharge.delete(h.index);
       }
       if (this.socEvaluated.has(h.index)) {

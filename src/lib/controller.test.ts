@@ -1964,6 +1964,58 @@ describe('MultiHeadController saturation seeding, edges', () => {
 		).to.equal(true);
 	});
 
+	it('records a limit reached while the grid is balanced', async () => {
+		// The block is set from the split's socLimited flag, which is false whenever the
+		// total target is zero. A head that runs down to its floor while the house sits
+		// on target is therefore never recorded as blocked — and the next time power is
+		// wanted, the loop commands it although the device is still holding it back.
+		const heads = [head({ index: 1, soc: 50, socMin: 5, socHysteresisDischarge: 5 })];
+		const { hooks, writes } = mockHooks(heads);
+		const ctrl = new MultiHeadController(mockAdapter().adapter, hooks, 'x.y.z', cfg());
+		await ctrl.start();
+		const at = sampleClock();
+		await ctrl.onGridPower(0, at()); // healthy, evaluated as free
+		const internal = ctrl as unknown as { saturatedDischarge: Set<number> };
+
+		heads[0].soc = 5; // local load ran it down to the floor, grid still balanced
+		ageWrite(ctrl, 10000);
+		await ctrl.onGridPower(0, at());
+		expect([...internal.saturatedDischarge], 'the floor must be recorded').to.deep.equal([1]);
+
+		heads[0].soc = 6; // PV lifted it a little; the device frees at 10 %
+		writes.length = 0;
+		ageWrite(ctrl, 10000);
+		await ctrl.onGridPower(500, at());
+		expect(
+			writes.some(w => w.gs > 0),
+			'nothing may be commanded inside the band',
+		).to.equal(false);
+	});
+
+	it('records the ceiling the same way', async () => {
+		const heads = [head({ index: 1, soc: 50, socMax: 95, socHysteresisCharge: 5 })];
+		const { hooks, writes } = mockHooks(heads);
+		const ctrl = new MultiHeadController(mockAdapter().adapter, hooks, 'x.y.z', cfg());
+		await ctrl.start();
+		const at = sampleClock();
+		await ctrl.onGridPower(0, at());
+		const internal = ctrl as unknown as { saturatedCharge: Set<number> };
+
+		heads[0].soc = 95; // PV filled it while the grid stayed balanced
+		ageWrite(ctrl, 10000);
+		await ctrl.onGridPower(0, at());
+		expect([...internal.saturatedCharge], 'the ceiling must be recorded').to.deep.equal([1]);
+
+		heads[0].soc = 94;
+		writes.length = 0;
+		ageWrite(ctrl, 10000);
+		await ctrl.onGridPower(-500, at());
+		expect(
+			writes.some(w => w.gs < 0),
+			'nothing may be commanded inside the band',
+		).to.equal(false);
+	});
+
 	it('says in the log when it holds a head back', async () => {
 		// The assumption costs real capacity for a while, and it is the answer to "why
 		// is my storage idle since the restart?" — debug would hide it from exactly the

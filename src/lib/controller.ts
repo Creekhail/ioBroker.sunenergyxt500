@@ -329,7 +329,7 @@ export class MultiHeadController {
 	 * The saturation memory above records what *this* run observed. After a restart —
 	 * or after forgetHead() dropped a head that went away and came back — it is empty,
 	 * so a head whose charge sits inside the device's hysteresis band looks free to
-	 * use. It is not: the device refuses until the band is cleared. See seedSaturation().
+	 * use. It is not: the device refuses until the band is cleared. See trackSaturation().
 	 */
 	private readonly socEvaluated = new Set<number>();
 	/**
@@ -549,7 +549,7 @@ export class MultiHeadController {
 		// Published before the split so a "controller wants to charge but the heads do
 		// not follow" situation is visible without reading the debug log.
 		await this.adapter.setStateChangedAsync('controller.totalTarget', totalTarget, true);
-		this.seedSaturation(heads);
+		this.trackSaturation(heads);
 		const charging = totalTarget < 0;
 		const memory = charging ? this.saturatedCharge : this.saturatedDischarge;
 		const setpoints = splitTarget(totalTarget, heads, memory);
@@ -680,7 +680,7 @@ export class MultiHeadController {
 		this.saturatedDischarge.delete(index);
 		this.saturatedCharge.delete(index);
 		// Without this the head would look evaluated but unsaturated — the empty-memory
-		// case seedSaturation() exists for.
+		// case trackSaturation() exists for.
 		this.socEvaluated.delete(index);
 	}
 
@@ -770,7 +770,8 @@ export class MultiHeadController {
 	}
 
 	/**
-	 * Assumes a head found inside a SoC hysteresis band is still held there.
+	 * Keeps the per-direction saturation memory in step with each head's charge, and
+	 * makes the conservative assumption for a head first seen inside a band.
 	 *
 	 * The saturation memory only knows what this run saw. After a restart, or after
 	 * forgetHead() dropped a head that came back, it is empty — and a head sitting at,
@@ -792,22 +793,26 @@ export class MultiHeadController {
 	 *
 	 * @param heads the heads taking part in this cycle
 	 */
-	private seedSaturation(heads: HeadState[]): void {
+	private trackSaturation(heads: HeadState[]): void {
 		for (const h of heads) {
 			// Without SoC data there is nothing to judge, and marking the head evaluated
 			// on a placeholder would spend the single look on a value we invented.
 			if (!h.controllable) {
 				continue;
 			}
-			// A charge that has moved clear of a band lifts the block on sight. Waiting for
-			// the split to hand out a non-zero setpoint misses the case where there is
-			// nothing to hand out: with the house on target every head gets 0, so one that
-			// charged past its floor meanwhile would stay blocked — and once its charge
-			// drifts back into the band, for good.
-			if (!inDischargeBand(h) && h.soc > h.socMin) {
+			// Both memories are maintained from the charge alone, never from the setpoint:
+			// reaching a limit records the block, moving clear of its band lifts it, and
+			// inside the band the record stands. The split's own socLimited flag cannot do
+			// this — it is false whenever the total target is zero, so a head that ran to
+			// its floor while the house sat on target was never recorded at all.
+			if (h.soc <= h.socMin) {
+				this.saturatedDischarge.add(h.index);
+			} else if (!inDischargeBand(h)) {
 				this.saturatedDischarge.delete(h.index);
 			}
-			if (!inChargeBand(h) && h.soc < h.socMax) {
+			if (h.soc >= h.socMax) {
+				this.saturatedCharge.add(h.index);
+			} else if (!inChargeBand(h)) {
 				this.saturatedCharge.delete(h.index);
 			}
 			if (this.socEvaluated.has(h.index)) {

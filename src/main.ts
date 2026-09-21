@@ -91,16 +91,6 @@ const OWNER_MARK = { createdBy: 'sunenergyxt500' } as const;
  */
 const UNLOAD_NEUTRALIZE_BUDGET_MS = 2000;
 
-/** How often the cleanup retries hosts that have no poll cycle of their own (ms). */
-const FOREIGN_RETRY_INTERVAL_MS = 60000;
-
-/**
- * Failed retries after which an unreachable recorded host is reported. Ten of them at
- * the interval above is ten minutes — long enough to ride out a reboot, short enough
- * that the operator learns about it in the same session.
- */
-const FOREIGN_RETRY_WARN_AFTER = 10;
-
 /**
  * Expands a hand-written en/de name with the generated machine translations for the
  * other ioBroker languages (en/de take precedence over the generated entries).
@@ -163,6 +153,15 @@ interface HeadRuntime {
 	 * a timestamp at least as fresh as the adapter start.
 	 */
 	firstPollDone?: boolean;
+	/**
+	 * Whether `maxPower` holds the value this head actually reported.
+	 *
+	 * Separate from firstPollDone, which only means "the first poll has begun writing
+	 * states". Between the two lie awaits, and anything that hands the inverter limit
+	 * back in that window would use the constructor default — 2400 W to a head that may
+	 * be an 800 W model.
+	 */
+	maxPowerKnown?: boolean;
 	/** Latest snapshot used for the aggregates and (later) the controller split. */
 	soc?: number;
 	bp?: number;
@@ -220,48 +219,6 @@ class Sunenergyxt500 extends utils.Adapter {
 	private readonly gsCleanupDone = new Set<string>();
 	/** Hosts the pending cleanup still has to reach, as recorded by the previous run. */
 	private gsCleanupHosts: string[] = [];
-	/**
-	 * Hosts from an earlier run that are no longer configured and could not be
-	 * neutralised yet. Carried into the ownership record so they are retried on the
-	 * next start instead of being forgotten.
-	 */
-	private pendingForeignHosts: string[] = [];
-	/** When the unconfigured-host retry last ran, so it does not fire on every poll. */
-	private lastForeignRetry = 0;
-	/**
-	 * When the meter-binding retry for unconfigured hosts last ran. Its own clock
-	 * rather than lastForeignRetry's: sharing one would let whichever job runs first
-	 * starve the other for a full interval.
-	 */
-	private lastMeterRetry = 0;
-	/** When the inverter-limit retry for unconfigured hosts last ran; its own clock. */
-	private lastIsRetry = 0;
-	/** Serialises read-modify-write updates of the inverter-limit claim. */
-	private isClaimQueue: Promise<void> = Promise.resolve();
-	/**
-	 * Clients for hosts that are not configured heads, keyed by hostKey().
-	 *
-	 * One per host rather than one per job: `maxSockets: 1` serialises a client, not
-	 * a device, and the start-up jobs run together — three of them would otherwise
-	 * open three connections to the same ESP32, whose socket table is very small.
-	 * Held only while those jobs run; see releaseForeignApis().
-	 */
-	private readonly foreignApis = new Map<string, SunEnergyXtApi>();
-	/**
-	 * Consecutive failed cleanup retries per host, so a host that is gone for good is
-	 * reported rather than retried in silence forever.
-	 */
-	private readonly foreignRetryFailures = new Map<string, number>();
-	/**
-	 * The same bookkeeping for meter bindings. Its own map rather than sharing the one
-	 * above: the two jobs fail independently, and a merged count would report one
-	 * device's silence under the other job's remedy.
-	 */
-	private readonly meterRetryFailures = new Map<string, number>();
-	/** The same for the inverter-limit job. */
-	private readonly isRetryFailures = new Map<string, number>();
-	/** Hosts whose inverter limit still has to be handed back once their model is known, keyed by hostKey(). */
-	private readonly isReleasePending = new Set<string>();
 
 	public constructor(options: Partial<utils.AdapterOptions> = {}) {
 		super({
@@ -382,20 +339,10 @@ class Sunenergyxt500 extends utils.Adapter {
 		// Bring every head into the state required by the chosen control mode before polling.
 		// In controller mode the part that talks to hosts which are not configured any
 		// more is left out here and run below, together with the other two.
-		await this.enforceMode('startup', this.controlMode === 'controller');
+		await this.enforceMode('startup');
 
 		if (this.controlMode === 'controller') {
-			// The three jobs each wait out a full request timeout on a host that is gone, so
-			// they run together rather than delaying the heads that are connected. All of them
-			// finish before setupController(), which replaces the recorded host list — anything
-			// an earlier run left on a head that is no longer configured would be lost.
 			const inherited = await this.isGsOwnedByAdapter();
-			const [removed] = await Promise.all([
-				this.cleanupRemovedHosts(),
-				this.resumeIsOwnership(),
-				this.releaseMeterBindings(),
-			]);
-			this.pendingForeignHosts = removed;
 			await this.setupController(inherited);
 		} else {
 			// Leave no stale controller telemetry behind: in off/device mode those states
@@ -404,21 +351,14 @@ class Sunenergyxt500 extends utils.Adapter {
 			await this.setState('controller.status', { val: '', ack: true });
 			await this.setState('controller.totalTarget', { val: 0, ack: true });
 			await this.setState('controller.gridPower', { val: 0, ack: true });
-			// Not regulating any more, but a previous run may have left a setpoint behind — and
-			// an inverter limit, which outlives it because handing that back needs a poll.
-			await Promise.all([this.resumeGsOwnership(), this.resumeIsOwnership()]);
+			// Not regulating any more, but a previous run may have left a setpoint behind.
+			await this.resumeGsOwnership();
 		}
 
 		this.log.info(
 			`Control mode: ${this.controlMode}. Polling ${this.heads.length} head(s) every ${this.pollIntervalMs / 1000}s` +
 				`${this.heads.length > 1 ? ', staggered' : ''}.`,
 		);
-		// The start-up jobs are done, so their shared clients can go; the retries below
-		// open their own as they need them.
-		this.releaseForeignApis();
-		// The startup has tried every outstanding job once. Without this the clocks stand at
-		// 0 and the first poll retries milliseconds later (measured on a dev-server).
-		this.lastForeignRetry = this.lastMeterRetry = this.lastIsRetry = Date.now();
 		this.startPolling();
 	}
 
@@ -538,14 +478,6 @@ class Sunenergyxt500 extends utils.Adapter {
 			write: false,
 			def: '',
 		});
-		await ensure('info.meterBound', {
-			name: loc({ en: 'Meter bound by adapter (device mode)', de: 'Zähler vom Adapter gebunden (Geräte-Modus)' }),
-			type: 'boolean',
-			role: 'indicator',
-			read: true,
-			write: false,
-			def: false,
-		});
 		await ensure('info.gsOwned', {
 			name: loc({
 				en: 'Adapter holds a grid setpoint on the heads',
@@ -556,50 +488,6 @@ class Sunenergyxt500 extends utils.Adapter {
 			read: true,
 			write: false,
 			def: false,
-		});
-		await ensure('info.meterBoundHosts', {
-			name: loc({
-				en: 'Heads the adapter bound a meter to (JSON list)',
-				de: 'Köpfe, an die der Adapter einen Zähler gebunden hat (JSON-Liste)',
-			}),
-			type: 'string',
-			role: 'json',
-			read: true,
-			write: false,
-			def: '[]',
-		});
-		await ensure('info.isOwned', {
-			name: loc({
-				en: 'Adapter holds a throttled inverter limit on the heads',
-				de: 'Adapter hält eine gedrosselte Wechselrichter-Grenze auf den Köpfen',
-			}),
-			type: 'boolean',
-			role: 'indicator',
-			read: true,
-			write: false,
-			def: false,
-		});
-		await ensure('info.isOwnedHosts', {
-			name: loc({
-				en: 'Heads an inverter limit was left on (JSON list)',
-				de: 'Köpfe, auf denen eine Wechselrichter-Grenze hinterlassen wurde (JSON-Liste)',
-			}),
-			type: 'string',
-			role: 'json',
-			read: true,
-			write: false,
-			def: '[]',
-		});
-		await ensure('info.gsOwnedHosts', {
-			name: loc({
-				en: 'Heads a grid setpoint was left on (JSON list)',
-				de: 'Köpfe, auf denen ein Netz-Sollwert hinterlassen wurde (JSON-Liste)',
-			}),
-			type: 'string',
-			role: 'json',
-			read: true,
-			write: false,
-			def: '[]',
 		});
 
 		await this.ensureChannels([...desired]);
@@ -809,6 +697,9 @@ class Sunenergyxt500 extends utils.Adapter {
 			// MG carries the head's max grid-tied output; if missing, derive the model
 			// limit (500 → 800 W, 500 PRO → 2400 W) instead of assuming a PRO.
 			h.maxPower = num(data.MG) ?? fallbackMaxPower(data);
+			// Set in the same synchronous run as the assignment above: an await between
+			// the two would reopen the window this flag exists to close.
+			h.maxPowerKnown = true;
 			h.socMin = num(data.SI) ?? num(data.SO);
 			h.socMax = num(data.SA);
 			// The device resumes only once the charge has moved this far back inside its limits.
@@ -833,9 +724,6 @@ class Sunenergyxt500 extends utils.Adapter {
 			await this.setStateChangedAsync(`${base}.info.lastError`, '', true);
 			// A head that answers again is the moment to finish a pending cleanup.
 			await this.retryGsCleanup(h);
-			await this.retryForeignMeterRelease();
-			await this.retryForeignIsRelease();
-			await this.finishIsRelease(h);
 			return true;
 		} catch (e) {
 			// `info.online` flips on the first failure; dropping the head out of the *control*
@@ -914,11 +802,8 @@ class Sunenergyxt500 extends utils.Adapter {
 	 * head, so a leftover or externally-set mode cannot lame the chosen control path.
 	 *
 	 * @param reason context shown in the log line
-	 * @param deferForeignRelease controller mode only: leave the release of bindings on
-	 * hosts that are no longer configured to the caller, so it does not delay the heads
-	 * that are
 	 */
-	private async enforceMode(reason: string, deferForeignRelease = false): Promise<void> {
+	private async enforceMode(reason: string): Promise<void> {
 		if (this.controlMode === 'controller') {
 			for (const h of this.heads) {
 				await this.writeHead(h, { MM: 0, MD: '' }, reason);
@@ -926,28 +811,12 @@ class Sunenergyxt500 extends utils.Adapter {
 			// Settling a binding on a device that is no longer configured can take a full
 			// timeout, and nothing here needs the result — the startup runs it alongside the
 			// other unconfigured-host jobs.
-			if (!deferForeignRelease) {
-				await this.releaseMeterBindings();
-			}
 		} else if (this.controlMode === 'device') {
 			const h = this.heads[0];
 			if (!h || !this.meterMd) {
 				return; // misconfigured — already warned, leave the device alone
 			}
-			// Recorded even if the write failed: the device may have applied it before the
-			// response was lost, and forgetting a real binding leaves it self-regulating. Any
-			// other host on record is a device head 1 used to point at, so that is released first.
-			await this.releaseMeterBindings(h.host);
 			this.meterMdPending = !(await this.writeHead(h, { MM: 1, MD: this.meterMd }, reason));
-		} else if (await this.isMeterBoundByAdapter()) {
-			// Off mode releases only a binding this adapter created, matched by host: whatever
-			// does not answer stays on record for the poll guard and the foreign retry.
-			await this.releaseMeterBindings();
-			if (await this.isMeterBoundByAdapter()) {
-				this.log.warn('Not every meter binding could be released yet — retrying as the heads answer.');
-			} else {
-				this.log.info('Released the adapter-managed meter binding (control mode is now off).');
-			}
 		}
 	}
 
@@ -982,12 +851,6 @@ class Sunenergyxt500 extends utils.Adapter {
 		}
 	}
 
-	/** Whether the adapter currently holds a device-native meter binding it created. */
-	private async isMeterBoundByAdapter(): Promise<boolean> {
-		const st = await this.getStateAsync('info.meterBound');
-		return !!st?.val;
-	}
-
 	/**
 	 * Whether the adapter left a grid setpoint on the heads that nothing is watching.
 	 *
@@ -1009,25 +872,6 @@ class Sunenergyxt500 extends utils.Adapter {
 	 */
 	private async setGsOwnedByAdapter(owned: boolean): Promise<void> {
 		await this.setState('info.gsOwned', { val: owned, ack: true });
-		// Which heads, not just that there are some: a plain flag is read against whatever
-		// is configured at the next start. The union keeps hosts from an earlier run that
-		// are still owed a cleanup.
-		const hosts = owned ? [...new Set([...this.heads.map(h => h.host), ...this.pendingForeignHosts])] : [];
-		await this.setState('info.gsOwnedHosts', { val: JSON.stringify(hosts), ack: true });
-	}
-
-	/**
-	 * Hosts a previous run left a setpoint on, as recorded at the time.
-	 *
-	 * Falls back to the currently configured heads when the record is missing or
-	 * unreadable — that is what an installation upgrading from a version without this
-	 * state looks like, and trying the current heads is better than trying none.
-	 */
-	private async gsOwnedHosts(): Promise<string[]> {
-		return this.readHostList(
-			'info.gsOwnedHosts',
-			this.heads.map(h => h.host),
-		);
 	}
 
 	/**
@@ -1056,184 +900,6 @@ class Sunenergyxt500 extends utils.Adapter {
 	}
 
 	/**
-	 * Records the heads a meter binding of ours currently sits on.
-	 *
-	 * A list rather than a single host, for the same reason as gsOwnedHosts: head 1
-	 * can be repointed at another device while the old one still carries our binding,
-	 * and a release that fails has to stay on the record until it succeeds. The plain
-	 * boolean is kept in step so installations upgrading from a version that only had
-	 * it keep working.
-	 *
-	 * @param hosts every host that carries a binding of ours right now
-	 */
-	private async setMeterBoundHosts(hosts: string[]): Promise<void> {
-		const unique = [...new Map(hosts.map(h => [hostKey(h), h])).values()];
-		await this.setState('info.meterBound', { val: unique.length > 0, ack: true });
-		await this.setState('info.meterBoundHosts', { val: JSON.stringify(unique), ack: true });
-	}
-
-	/**
-	 * A client for a host with no configured head, shared with any job running at
-	 * the same moment so requests to one device queue behind each other.
-	 *
-	 * @param host the address to talk to
-	 * @param timeoutMs request deadline
-	 */
-	private foreignApi(host: string, timeoutMs: number): SunEnergyXtApi {
-		const key = hostKey(host);
-		let api = this.foreignApis.get(key);
-		if (!api) {
-			api = new SunEnergyXtApi(host, timeoutMs, this);
-			this.foreignApis.set(key, api);
-		}
-		return api;
-	}
-
-	/** Closes every shared throwaway client, once the jobs using them are done. */
-	private releaseForeignApis(): void {
-		for (const api of this.foreignApis.values()) {
-			api.destroy();
-		}
-		this.foreignApis.clear();
-	}
-
-	/**
-	 * Heads a binding of ours sits on.
-	 *
-	 * Falls back to head 1 when only the old boolean exists — that is what an install
-	 * upgrading from a version without the list looks like, and head 1 is the only
-	 * head device mode ever binds.
-	 */
-	private async meterBoundHosts(): Promise<string[]> {
-		if (!(await this.isMeterBoundByAdapter())) {
-			return [];
-		}
-		const fallbackHost = this.heads[0]?.host;
-		return this.readHostList('info.meterBoundHosts', fallbackHost ? [fallbackHost] : []);
-	}
-
-	/**
-	 * Releases meter bindings of ours on every recorded host except the one the caller
-	 * is about to keep, and updates the record to what is actually left behind.
-	 *
-	 * Every startup branch goes through here before it touches the record. Overwriting
-	 * it unread was the same mistake gsOwnedHosts made: the entry is the only trace of
-	 * a device that is still self-regulating from our meter, and losing it leaves two
-	 * controllers working one battery with nobody aware of it.
-	 *
-	 * @param keep the host whose binding stays (empty when all of them go)
-	 */
-	private async releaseMeterBindings(keep = ''): Promise<void> {
-		if (this.stopping) {
-			return; // the shutdown owns the devices from here on
-		}
-		const recorded = await this.meterBoundHosts();
-		const keepKey = hostKey(keep);
-		const stale = recorded.filter(host => hostKey(host) !== keepKey);
-		if (!stale.length) {
-			await this.setMeterBoundHosts(keep ? [keep] : []);
-			return;
-		}
-		const timeoutMs = Math.max(1000, Math.round(cfgNum(this.config.requestTimeout, 8000)));
-		const left: string[] = [];
-		await Promise.all(
-			stale.map(async host => {
-				// Heads still configured have a client of their own; a host that has been
-				// repointed away or removed gets a throwaway one, so it is reached all the same.
-				const known = this.heads.find(x => hostKey(x.host) === hostKey(host));
-				const api = known?.api ?? this.foreignApi(host, timeoutMs);
-				try {
-					await api.write({ MM: 0, MD: '' });
-					this.meterRetryFailures.delete(hostKey(host));
-					this.log.info(`Head ${host}: released the adapter-managed meter binding.`);
-				} catch (e) {
-					this.reportRetryFailure(
-						this.meterRetryFailures,
-						host,
-						'releasing the adapter-managed meter binding',
-						'info.meterBoundHosts',
-						errMsg(e),
-					);
-					left.push(host);
-				}
-			}),
-		);
-		await this.setMeterBoundHosts(keep ? [keep, ...left] : left);
-	}
-
-	/** Whether a throttled inverter limit of ours may still stand on a head. */
-	private async isIsOwnedByAdapter(): Promise<boolean> {
-		const st = await this.getStateAsync('info.isOwned');
-		return !!st?.val;
-	}
-
-	/**
-	 * Records that a throttled inverter limit of ours stands on the given heads.
-	 *
-	 * Separate from gsOwned because the two claims end at different moments: GS is
-	 * cleared as soon as a zero lands, while IS can only be handed back once the head's
-	 * real maximum is known, which takes a successful poll. Keeping this in RAM meant
-	 * that whether a limit of ours was standing anywhere was inferred from whether the
-	 * option happens to be enabled *now* — a fact about the past read off the present.
-	 *
-	 * @param hosts every host that carries a limit of ours right now
-	 */
-	private async setIsOwnedHosts(hosts: string[]): Promise<void> {
-		const unique = [...new Map(hosts.map(h => [hostKey(h), h])).values()];
-		await this.setState('info.isOwned', { val: unique.length > 0, ack: true });
-		await this.setState('info.isOwnedHosts', { val: JSON.stringify(unique), ack: true });
-	}
-
-	/**
-	 * Adds the current heads to the inverter-limit claim without dropping what is
-	 * already on it.
-	 *
-	 * Replacing the list was the same mistake gsOwnedHosts made in an earlier round: a
-	 * host that is no longer configured and could not be reached stays on the claim on
-	 * purpose, and a plain overwrite two lines later loses the only record that its
-	 * inverter is still throttled.
-	 */
-	private async claimIsForCurrentHeads(): Promise<void> {
-		const outstanding = await this.isOwnedHosts();
-		const configured = new Set(this.heads.map(h => hostKey(h.host)));
-		await this.setIsOwnedHosts([
-			...this.heads.map(h => h.host),
-			...outstanding.filter(host => !configured.has(hostKey(host))),
-		]);
-	}
-
-	/** Heads a throttled inverter limit of ours may sit on. */
-	private async isOwnedHosts(): Promise<string[]> {
-		if (!(await this.isIsOwnedByAdapter())) {
-			return [];
-		}
-		return this.readHostList(
-			'info.isOwnedHosts',
-			this.heads.map(h => h.host),
-		);
-	}
-
-	/**
-	 * Drops one host from the inverter-limit claim once its limit has been handed back.
-	 *
-	 * @param host the head that confirmed the release
-	 */
-	private async clearIsClaim(host: string): Promise<void> {
-		// Serialised: read-modify-write on a shared record, so two heads finishing their
-		// release together would otherwise lose one of the two removals.
-		const op = async (): Promise<void> => {
-			const left = (await this.isOwnedHosts()).filter(x => hostKey(x) !== hostKey(host));
-			await this.setIsOwnedHosts(left);
-		};
-		// Queued on both settlements, and the queue keeps only a resolved promise: a
-		// `.then(op)` on a rejected chain never calls op again, so one refused state
-		// write would stop every later update for the rest of the run.
-		const run = this.isClaimQueue.then(op, op);
-		this.isClaimQueue = run.catch(() => undefined);
-		await run;
-	}
-
-	/**
 	 * Keeps a head's self-consumption mode (MM) consistent with the chosen control
 	 * mode on every poll; re-asserts and warns once on mismatch.
 	 *
@@ -1242,26 +908,7 @@ class Sunenergyxt500 extends utils.Adapter {
 	 */
 	private async guardMeterMode(h: HeadRuntime, data: ReportedState): Promise<void> {
 		if (this.controlMode === 'off') {
-			// Off enforces nothing — except finishing a release of ours that failed earlier,
-			// without which the device keeps self-regulating until the next start. "Off" would
-			// not be off. Matched by host, for the same reason as in enforceMode.
-			const bound = await this.meterBoundHosts();
-			if (!bound.some(host => hostKey(host) === hostKey(h.host))) {
-				return;
-			}
-			const mm = num(data.MM);
-			if (mm === 1) {
-				if (await this.writeHead(h, { MM: 0, MD: '' }, 'off-cleanup retry')) {
-					await this.setMeterBoundHosts(bound.filter(x => hostKey(x) !== hostKey(h.host)));
-					this.log.info(`Head ${h.index}: released the adapter-managed meter binding (control mode is off).`);
-				}
-			} else if (mm === 0) {
-				// Explicitly zero: the binding is gone, whoever cleared it, so the record
-				// can close. Anything else — a missing or unparseable MM — says nothing
-				// about the device and must not count as proof of a release.
-				await this.setMeterBoundHosts(bound.filter(x => hostKey(x) !== hostKey(h.host)));
-			}
-			return;
+			return; // off never writes
 		}
 		if (this.controlMode === 'device' && (h.index !== 1 || !this.meterMd)) {
 			return;
@@ -1529,27 +1176,11 @@ class Sunenergyxt500 extends utils.Adapter {
 						}),
 					]);
 					clearTimeout(budget);
-					// The state is the truth, not the in-memory list: a host the operator struck from
-					// the record would otherwise be written straight back on the next clean stop.
-					const stillRecorded = new Set((await this.gsOwnedHosts()).map(hostKey));
-					const outstanding = this.pendingForeignHosts.filter(host => stillRecorded.has(hostKey(host)));
 					// Only drop ownership when every head confirmed. If the budget ran out
 					// or a head refused, the flag stays set and the next start finishes the
 					// job — see resumeGsOwnership().
-					if (cleared && !outstanding.length) {
+					if (cleared) {
 						await this.setGsOwnedByAdapter(false);
-					} else if (cleared) {
-						// Configured heads confirmed, earlier ones not: point the record at exactly those,
-						// so the next start goes after them rather than starting over.
-						await this.setState('info.gsOwned', { val: true, ack: true });
-						await this.setState('info.gsOwnedHosts', {
-							val: JSON.stringify(outstanding),
-							ack: true,
-						});
-						this.log.warn(
-							`Heads from an earlier run still carry a setpoint (${outstanding.join(', ')}) ` +
-								'— the next start will neutralise them.',
-						);
 					} else {
 						this.log.warn(
 							'Could not confirm GS=0 on every head within the shutdown budget — the next start ' +
@@ -1565,7 +1196,6 @@ class Sunenergyxt500 extends utils.Adapter {
 				for (const h of this.heads) {
 					h.api.destroy();
 				}
-				this.releaseForeignApis();
 				callback();
 			}
 		})();
@@ -1580,10 +1210,9 @@ class Sunenergyxt500 extends utils.Adapter {
 	 * times its rating.
 	 *
 	 * @param h the head being neutralised
-	 * @param claimed hosts carrying an inverter limit of ours
 	 */
-	private neutralPayload(h: HeadRuntime, claimed: string[]): { payload: Record<string, number>; releaseIs: boolean } {
-		const releaseIs = claimed.some(x => hostKey(x) === hostKey(h.host)) && h.firstPollDone === true;
+	private neutralPayload(h: HeadRuntime): { payload: Record<string, number>; releaseIs: boolean } {
+		const releaseIs = !!this.config.controllerControlIs && h.maxPowerKnown === true;
 		return {
 			releaseIs,
 			payload: releaseIs ? { GS: 0, IS: Math.round(Math.abs(h.maxPower)) } : { GS: 0 },
@@ -1600,24 +1229,17 @@ class Sunenergyxt500 extends utils.Adapter {
 	 * @returns true only if every head confirmed the write
 	 */
 	private async neutralizeAllGs(reason = 'controller shutdown'): Promise<boolean> {
-		// What is standing on the device, not what the option says now — the same
-		// distinction resumeIsOwnership() makes, and for the same reason.
-		const isOwned = await this.isOwnedHosts();
-		const released: string[] = [];
 		// Every configured head, not just the ones the poll calls online: a head is marked
 		// offline after one missed poll while still executing its last setpoint, and those
 		// need the write most. In parallel, so trying them all costs no extra time.
 		const results = await Promise.all(
 			this.heads.map(async h => {
-				const { payload, releaseIs } = this.neutralPayload(h, isOwned);
+				const { payload, releaseIs } = this.neutralPayload(h);
 				try {
 					await h.api.write(payload);
 					this.log.info(
 						`Head ${h.index}: GS neutralized to 0${releaseIs ? ', IS released to maximum' : ''} (${reason}).`,
 					);
-					if (releaseIs) {
-						released.push(h.host);
-					}
 					return true;
 				} catch (e) {
 					this.log.warn(`Head ${h.index}: could not neutralize GS: ${errMsg(e)}`);
@@ -1625,9 +1247,6 @@ class Sunenergyxt500 extends utils.Adapter {
 				}
 			}),
 		);
-		if (released.length) {
-			await this.setIsOwnedHosts(isOwned.filter(x => !released.some(host => hostKey(host) === hostKey(x))));
-		}
 		return results.every(Boolean);
 	}
 
@@ -1642,75 +1261,19 @@ class Sunenergyxt500 extends utils.Adapter {
 	 * Heads that cannot be reached right now are retried from the poll loop, so the
 	 * ownership flag only clears once every head has actually confirmed.
 	 */
-	/**
-	 * Neutralises heads a previous run owned that are no longer configured.
-	 *
-	 * Runs on *both* startup paths. The controller path is the one that matters most —
-	 * dropping a head from the configuration and staying in controller mode is the
-	 * normal thing to do — and it is also the path that overwrites the recorded host
-	 * list, so whatever is not handled here is lost for good.
-	 *
-	 * @returns hosts that could not be reached and therefore stay on the record
-	 */
-	private async cleanupRemovedHosts(): Promise<string[]> {
-		if (!(await this.isGsOwnedByAdapter())) {
-			return [];
-		}
-		const current = new Set(this.heads.map(h => hostKey(h.host)));
-		const gone = (await this.gsOwnedHosts()).filter(host => !current.has(hostKey(host)));
-		if (!gone.length) {
-			return [];
-		}
-		this.log.info(
-			`${gone.length} head(s) from an earlier run are no longer configured (${gone.join(', ')}) but may ` +
-				'still carry a setpoint — neutralising them.',
-		);
-		const timeoutMs = Math.max(1000, Math.round(cfgNum(this.config.requestTimeout, 8000)));
-		const failed: string[] = [];
-		await Promise.all(
-			gone.map(async host => {
-				const api = this.foreignApi(host, timeoutMs);
-				try {
-					// GS only: these heads are not configured any more, so the correct inverter maximum
-					// is unknown. Neutralising the setpoint is the part we can get right.
-					await api.write({ GS: 0 });
-					this.log.info(`Head ${host}: GS neutralized to 0 (removed from configuration).`);
-					this.gsCleanupDone.add(hostKey(host));
-				} catch (e) {
-					this.log.warn(`Head ${host}: could not be neutralised: ${errMsg(e)}`);
-					this.foreignRetryFailures.set(hostKey(host), 1);
-					failed.push(host);
-				}
-			}),
-		);
-		return failed;
-	}
-
 	private async resumeGsOwnership(): Promise<void> {
 		if (!(await this.isGsOwnedByAdapter())) {
 			return;
 		}
-		const hosts = await this.gsOwnedHosts();
-		const current = new Set(this.heads.map(h => hostKey(h.host)));
-		const gone = hosts.filter(host => !current.has(hostKey(host)));
+		const hosts = this.heads.map(h => h.host);
 		this.log.info(
 			`A grid setpoint from an earlier run may still be active on ${hosts.length} head(s) — neutralising them.`,
 		);
-		if (gone.length) {
-			this.log.info(
-				`Including ${gone.length} head(s) no longer configured here (${gone.join(', ')}); they were left ` +
-					'with a setpoint and are cleaned up regardless.',
-			);
-		}
-		const timeoutMs = Math.max(1000, Math.round(cfgNum(this.config.requestTimeout, 8000)));
 		const results = await Promise.all(
 			hosts.map(async host => {
-				// Heads still configured have an api instance; the ones that are gone get a
-				// throwaway client so they are reached all the same.
-				const known = this.heads.find(x => hostKey(x.host) === hostKey(host));
-				const api = known?.api ?? this.foreignApi(host, timeoutMs);
-				// GS only: this runs before the first poll, so no head’s real maximum is known yet.
-				// resumeIsOwnership() picks the inverter limit up once one arrives.
+				const api = this.heads.find(x => hostKey(x.host) === hostKey(host))!.api;
+				// GS only: this runs before the first poll, so no head's real maximum is
+				// known yet, and 2400 would be handed to a model that may be an 800.
 				try {
 					await api.write({ GS: 0 });
 					this.log.info(`Head ${host}: GS neutralized to 0 (ownership cleanup).`);
@@ -1718,7 +1281,6 @@ class Sunenergyxt500 extends utils.Adapter {
 					return true;
 				} catch (e) {
 					this.log.warn(`Head ${host}: ownership cleanup failed: ${errMsg(e)}`);
-					this.foreignRetryFailures.set(hostKey(host), 1);
 					return false;
 				}
 			}),
@@ -1739,278 +1301,12 @@ class Sunenergyxt500 extends utils.Adapter {
 	 * @param h the head that just delivered a successful poll
 	 */
 	/**
-	 * Reports a failed retry on a host that has no poll of its own.
-	 *
-	 * The same shape three times over: the first failure is worth a warning, the
-	 * repeats are not, and after ten minutes the operator needs to hear that this host
-	 * is holding a record open and how to close it. Written out at each call site, the
-	 * third one was forgotten and produced a warning a minute, indefinitely.
-	 *
-	 * @param book per-host failure counts for this job
-	 * @param host the host that did not answer
-	 * @param what the job, named for the log
-	 * @param stateId the record the operator can strike the host from
-	 * @param detail the underlying error message
-	 */
-	private reportRetryFailure(
-		book: Map<string, number>,
-		host: string,
-		what: string,
-		stateId: string,
-		detail: string,
-	): void {
-		const failures = (book.get(hostKey(host)) ?? 0) + 1;
-		book.set(hostKey(host), failures);
-		if (failures === 1) {
-			this.log.warn(`Head ${host}: ${what} failed (${detail}) — keeping it on record and retrying.`);
-		} else if (failures === FOREIGN_RETRY_WARN_AFTER) {
-			const minutes = Math.round((FOREIGN_RETRY_WARN_AFTER * FOREIGN_RETRY_INTERVAL_MS) / 60000);
-			this.log.warn(
-				`Head ${host} has not answered for ${minutes} minutes and still holds ${stateId} open. ` +
-					'The adapter keeps trying, because what it cannot confirm it must not forget. If that ' +
-					`device is gone for good, remove its address from ${stateId}.`,
-			);
-		} else {
-			this.log.debug(`Head ${host}: ${what} failed again: ${detail}`);
-		}
-	}
-
-	/**
-	 * Retries hosts from the outstanding cleanup that have no poll of their own.
-	 *
-	 * A head that is no longer configured is never polled, so the ordinary retry never
-	 * reaches it and the ownership flag would stay set forever. This rides along on any
-	 * other head's poll, throttled so an unreachable host does not add a request per
-	 * poll cycle.
-	 */
-	private async retryForeignCleanup(): Promise<void> {
-		if (this.stopping) {
-			return; // the shutdown owns the devices from here on
-		}
-		const configured = new Set(this.heads.map(x => hostKey(x.host)));
-		// Two sources: off/device records the whole job in gsCleanupHosts, controller mode
-		// only the unreachable heads in pendingForeignHosts. Neither has a poll of its own.
-		const candidates = this.gsCleanupPending ? this.gsCleanupHosts : this.pendingForeignHosts;
-		// Filtered against the record, so striking a host from info.gsOwnedHosts takes
-		// effect at once rather than only after a restart — the remedy the ten-minute
-		// warning names has to work while the adapter is running.
-		const stillRecorded = new Set((await this.gsOwnedHosts()).map(hostKey));
-		const pending = candidates.filter(
-			host =>
-				!configured.has(hostKey(host)) &&
-				!this.gsCleanupDone.has(hostKey(host)) &&
-				stillRecorded.has(hostKey(host)),
-		);
-		if (!pending.length || Date.now() - this.lastForeignRetry < FOREIGN_RETRY_INTERVAL_MS) {
-			return;
-		}
-		this.lastForeignRetry = Date.now();
-		const timeoutMs = Math.max(1000, Math.round(cfgNum(this.config.requestTimeout, 8000)));
-		await Promise.all(
-			pending.map(async host => {
-				const api = this.foreignApi(host, timeoutMs);
-				try {
-					await api.write({ GS: 0 });
-					this.log.info(`Head ${host}: GS neutralized to 0 (cleanup retry, no longer configured).`);
-					this.gsCleanupDone.add(hostKey(host));
-					this.foreignRetryFailures.delete(hostKey(host));
-				} catch (e) {
-					this.reportRetryFailure(
-						this.foreignRetryFailures,
-						host,
-						'neutralising a grid setpoint from an earlier run',
-						'info.gsOwnedHosts',
-						errMsg(e),
-					);
-				}
-			}),
-		);
-		this.releaseForeignApis();
-		this.pendingForeignHosts = this.pendingForeignHosts.filter(h => !this.gsCleanupDone.has(hostKey(h)));
-		if (this.gsCleanupPending) {
-			await this.finishCleanupIfDone();
-		}
-	}
-
-	/**
 	 * Retries releasing meter bindings on hosts that have no poll of their own.
 	 *
 	 * A device head 1 no longer points at is never polled, so the off-mode guard never
 	 * reaches it while it keeps regulating itself from the meter this adapter bound.
 	 * Rides along on any other head's poll, on its own throttle.
 	 */
-	/**
-	 * Retries handing the inverter limit back on hosts that have no poll of their own.
-	 *
-	 * Without this the comment on releaseForeignIs() was a promise the code did not
-	 * keep: a removed head that was unreachable at startup kept its throttled limit
-	 * until the next adapter start, which may be weeks away.
-	 */
-	private async retryForeignIsRelease(): Promise<void> {
-		// Belt and braces: releaseForeignIs() carries the same guard, so removing this
-		// one changes no behaviour. It saves a state read during shutdown and keeps the
-		// three retry methods the same shape.
-		if (this.stopping) {
-			return;
-		}
-		const claimed = await this.isOwnedHosts();
-		if (!claimed.length || Date.now() - this.lastIsRetry < FOREIGN_RETRY_INTERVAL_MS) {
-			return;
-		}
-		const configured = new Set(this.heads.map(x => hostKey(x.host)));
-		// Configured heads are finished by finishIsRelease() on their own poll — and must
-		// be skipped here, not merely left to it: with IS steering on they are on the
-		// claim on purpose, and this retry would write IS = maximum into the running
-		// regulation once a minute.
-		const gone = claimed.filter(host => !configured.has(hostKey(host)));
-		if (!gone.length) {
-			return;
-		}
-		this.lastIsRetry = Date.now();
-		await this.releaseForeignIs(gone);
-		this.releaseForeignApis();
-	}
-
-	private async retryForeignMeterRelease(): Promise<void> {
-		if (this.stopping) {
-			return;
-		}
-		// Device mode maintains head 1's binding on purpose — but only that one. Every
-		// other host on the record is a device this adapter bound earlier and has since
-		// stopped pointing at; none of them is polled, so this is their only way back.
-		const keep = this.controlMode === 'device' ? (this.heads[0]?.host ?? '') : '';
-		const bound = await this.meterBoundHosts();
-		if (!bound.length || Date.now() - this.lastMeterRetry < FOREIGN_RETRY_INTERVAL_MS) {
-			return;
-		}
-		const settled = new Set(this.heads.map(x => hostKey(x.host)));
-		if (keep) {
-			// In device mode the polled head is the one we keep, so it is not "settled" by
-			// the poll guard — that guard only runs in off mode.
-			settled.clear();
-			settled.add(hostKey(keep));
-		}
-		if (!bound.some(host => !settled.has(hostKey(host)))) {
-			return; // nothing on record but hosts that are handled elsewhere
-		}
-		this.lastMeterRetry = Date.now();
-		await this.releaseMeterBindings(keep);
-		this.releaseForeignApis();
-	}
-
-	/**
-	 * Picks up an inverter limit a previous run left throttled.
-	 *
-	 * Runs on every start, independently of the grid-setpoint cleanup: the two claims
-	 * end at different moments. GS is cleared the instant a zero lands, while IS can
-	 * only be handed back once the head's real maximum is known — so a run that ended
-	 * before the first poll leaves GS settled and IS still throttled. Reading the claim
-	 * off `controllerControlIs` instead meant that turning the option off made the
-	 * adapter forget a limit that was already sitting on the device, leaving the
-	 * inverter shut while the controller integrates against it.
-	 */
-	private async resumeIsOwnership(): Promise<void> {
-		const claimed = await this.isOwnedHosts();
-		if (!claimed.length) {
-			return;
-		}
-		// The controller hands its own limits back; only heads it is not going to steer
-		// need picking up here.
-		const steering = this.controlMode === 'controller' && !!this.config.controllerControlIs;
-		const configured = new Map(this.heads.map(h => [hostKey(h.host), h]));
-		const unconfigured = claimed.filter(host => !configured.has(hostKey(host)));
-		for (const host of claimed) {
-			const known = configured.get(hostKey(host));
-			if (known && !steering) {
-				// Finished by finishIsRelease() on the first poll that delivers the real MG.
-				this.isReleasePending.add(hostKey(known.host));
-			}
-		}
-		if (unconfigured.length) {
-			this.log.info(
-				`An inverter limit from an earlier run may still throttle ${unconfigured.length} head(s) that ` +
-					`are no longer configured (${unconfigured.join(', ')}) — reading their model to hand it back.`,
-			);
-			await this.releaseForeignIs(unconfigured);
-		}
-		if (steering) {
-			// The controller is about to take the limits over, so the claim simply carries
-			// on under its ownership rather than being handed back and re-applied — plus
-			// whatever releaseForeignIs() could not reach just now.
-			await this.claimIsForCurrentHeads();
-		}
-	}
-
-	/**
-	 * Hands the inverter limit back on hosts that are not configured any more.
-	 *
-	 * Their model is unknown, and writing a guessed maximum would hand a 500 three
-	 * times its rating — so the device is asked first. A host that does not answer
-	 * stays on the claim and is retried from the poll loop.
-	 *
-	 * @param hosts the unconfigured hosts still carrying a limit of ours
-	 */
-	private async releaseForeignIs(hosts: string[]): Promise<void> {
-		if (this.stopping) {
-			return;
-		}
-		const timeoutMs = Math.max(1000, Math.round(cfgNum(this.config.requestTimeout, 8000)));
-		await Promise.all(
-			hosts.map(async host => {
-				const api = this.foreignApi(host, timeoutMs);
-				try {
-					const data = (await api.read()).reported;
-					// Checked again after the read: the shutdown may have run while the
-					// answer was outstanding, and the write below would then reach a device
-					// the adapter has already let go of — possibly one the next instance is
-					// taking over. The claim stays open, so the next start finishes the job.
-					if (this.stopping) {
-						return;
-					}
-					const max = Math.round(Math.abs(num(data.MG) ?? fallbackMaxPower(data)));
-					await api.write({ IS: max });
-					this.isRetryFailures.delete(hostKey(host));
-					this.log.info(`Head ${host}: inverter limit released to ${max} W (no longer configured).`);
-					await this.clearIsClaim(host);
-				} catch (e) {
-					this.reportRetryFailure(
-						this.isRetryFailures,
-						host,
-						'releasing the inverter limit',
-						'info.isOwnedHosts',
-						errMsg(e),
-					);
-				}
-			}),
-		);
-	}
-
-	/**
-	 * Hands the inverter limit back once a head's real maximum is known.
-	 *
-	 * The startup cleanup deliberately skips IS while `maxPower` is still the
-	 * constructor default — writing 2400 W to a 500 would be worse than writing
-	 * nothing. This finishes the job on the first poll that delivers the true value.
-	 *
-	 * @param h the head that has just been polled successfully
-	 */
-	private async finishIsRelease(h: HeadRuntime): Promise<void> {
-		if (this.stopping || !this.isReleasePending.has(hostKey(h.host)) || !h.firstPollDone) {
-			return;
-		}
-		// Taken off the list before the await: a head’s own poll and the staggered start-up
-		// poll overlap, and clearing only on success let both write. Put back on failure.
-		this.isReleasePending.delete(hostKey(h.host));
-		try {
-			await h.api.write({ IS: Math.round(Math.abs(h.maxPower)) });
-			await this.clearIsClaim(h.host);
-			this.log.info(`Head ${h.index}: inverter limit released to ${Math.round(Math.abs(h.maxPower))} W.`);
-		} catch (e) {
-			this.isReleasePending.add(hostKey(h.host));
-			this.log.debug(`Head ${h.index}: could not release the inverter limit yet: ${errMsg(e)}`);
-		}
-	}
-
 	/** Clears the ownership flag once every host of the outstanding job is done. */
 	private async finishCleanupIfDone(): Promise<void> {
 		if (this.gsCleanupHosts.every(host => this.gsCleanupDone.has(hostKey(host)))) {
@@ -2024,7 +1320,6 @@ class Sunenergyxt500 extends utils.Adapter {
 		if (this.stopping) {
 			return;
 		}
-		await this.retryForeignCleanup();
 		if (
 			!this.gsCleanupPending ||
 			this.controlMode === 'controller' ||
@@ -2039,20 +1334,11 @@ class Sunenergyxt500 extends utils.Adapter {
 		try {
 			// IS goes in the same request, or a head cleaned up here keeps a throttled limit
 			// that nothing will lift.
-			const claimed = await this.isOwnedHosts();
-			if (this.stopping) {
-				// Consistency with releaseForeignIs(), which has the same shape and a test.
-				// Untested here: the window is a states-DB read, too short to drive from a
-				// test without contorting the harness, and h.api is torn down on unload.
-				return;
-			}
-			const { payload, releaseIs } = this.neutralPayload(h, claimed);
+			const { payload, releaseIs } = this.neutralPayload(h);
 			await h.api.write(payload);
 			this.log.info(`Head ${h.index}: GS neutralized to 0 (ownership cleanup, retry).`);
 			this.gsCleanupDone.add(hostKey(h.host));
-			if (releaseIs) {
-				await this.clearIsClaim(h.host);
-			}
+			void releaseIs;
 			// Measured against the hosts the *previous* run recorded, not the current
 			// configuration: a head removed in between must not make this look finished.
 			await this.finishCleanupIfDone();
@@ -2130,11 +1416,6 @@ class Sunenergyxt500 extends utils.Adapter {
 		// Claim ownership *before* the first setpoint leaves: if the process dies between
 		// the write and the flag, the next start must still know a setpoint is standing.
 		await this.setGsOwnedByAdapter(true);
-		if (this.config.controllerControlIs) {
-			// Same reasoning for the inverter limit, which needs its own record: it is
-			// handed back later than the setpoint and on a different condition.
-			await this.claimIsForCurrentHeads();
-		}
 		await this.controller.start();
 		this.log.info(
 			`Self-consumption controller active on grid source "${this.gridStateId}" across ${this.heads.length} head(s).`,
