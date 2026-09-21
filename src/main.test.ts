@@ -123,6 +123,28 @@ describe('state definitions', () => {
 		);
 	});
 
+	it('is never narrower than the manufacturer bounds', () => {
+		// Two different jobs: our range check exists to stop a typo reaching the hardware,
+		// the vendor's slider is a UI recommendation. Being wider than theirs is a choice
+		// (SI/SA/SO stay 1..100 because the API calls its figures "recommended values").
+		// Being NARROWER refuses settings the device accepts — SI1/SA1 were capped at 50.
+		const vendor: Record<string, [number, number]> = {
+			GS: [-2400, 2400],
+			IS: [1, 2400],
+			MG: [1, 2400],
+			SI1: [0, 100],
+			SA1: [0, 100],
+		};
+		for (const d of [...measurementDefs, ...controlDefs]) {
+			const v = vendor[d.field];
+			if (!v) {
+				continue;
+			}
+			expect(d.min, `${d.field}: lower bound above the vendor's`).to.be.at.most(v[0]);
+			expect(d.max, `${d.field}: upper bound below the vendor's`).to.be.at.least(v[1]);
+		}
+	});
+
 	it('does not expose any API-reserved field as writable', () => {
 		// SI1/SA1 were on this list until the manufacturer documented them as writable
 		// with a 5% default; PO/PT/SD/CF remain reserved.

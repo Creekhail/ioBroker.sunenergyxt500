@@ -239,7 +239,7 @@ const measurementDefs = [
     role: "value.energy",
     unit: "Wh",
     type: "number",
-    name: { en: "Daily off-grid load energy", de: "T\xE4gliche Inselbetriebs-Lastenergie" }
+    name: { en: "Today's off-grid output energy", de: "Heutige Inselbetriebs-Ausgangsenergie" }
   },
   // Battery topology / per-pack SoC
   {
@@ -305,8 +305,11 @@ const measurementDefs = [
   {
     id: "battery.SI1",
     field: "SI1",
+    // 0..100 like any percentage, matching the manufacturer's own integration. The API
+    // gives no range at all, only the 5 % default, and a cap of 50 here would have
+    // refused settings the device accepts.
     min: 0,
-    max: 50,
+    max: 100,
     role: "level",
     unit: "%",
     type: "number",
@@ -316,8 +319,11 @@ const measurementDefs = [
   {
     id: "battery.SA1",
     field: "SA1",
+    // 0..100 like any percentage, matching the manufacturer's own integration. The API
+    // gives no range at all, only the 5 % default, and a cap of 50 here would have
+    // refused settings the device accepts.
     min: 0,
-    max: 50,
+    max: 100,
     role: "level",
     unit: "%",
     type: "number",
@@ -476,7 +482,11 @@ const measurementDefs = [
     name: { en: "Local-mode port", de: "Port (lokaler Modus)" }
   },
   {
-    // Read-only: PT is a "reserved" field per the API docs, so we do not write it.
+    // Read-only although the manufacturer's own HA integration offers it as a writable
+    // number (30..1440 min): section 4.1 of the API reference still lists PT under
+    // "Reserved Fields" — "use only when the device protocol has been explicitly
+    // confirmed". PT switches the device off, so a wrong value is not cosmetic, and
+    // the two manufacturer sources disagree. Not implemented ahead of that evidence.
     id: "device.PT",
     field: "PT",
     role: "value",
