@@ -547,6 +547,53 @@ describe('adapter lifecycle', function () {
 		await h.unload();
 	});
 
+	it('still clears an orphaned setpoint when the mode is forced to off', async () => {
+		// The other half of what the refusal promises. It leaves the device's own
+		// regulation alone, but a GS from a run that ended badly has nobody watching it —
+		// and the refusal means nobody is about to start, either.
+		const h = createHarness(
+			{
+				head1Host: `127.0.0.1:${head1.port}`,
+				controlMode: 'controller',
+				gridPowerStateId: '',
+				pollInterval: 3600,
+				requestTimeout: 2000,
+			},
+			{ 'info.gsOwned': true }, // a controller run that never neutralised
+		);
+		head1.reported.GS = -1500;
+		await h.ready();
+		expect(
+			head1.writes.some(w => w.GS === 0),
+			'the setpoint has to go even though the controller cannot start',
+		).to.equal(true);
+		expect(
+			head1.writes.some(w => 'MM' in w),
+			'but the binding is not touched',
+		).to.equal(false);
+		await h.unload();
+	});
+
+	it('keeps the meter binding when the source points at the adapter itself', async () => {
+		// The third of the three refusals. Each sets the flag on its own line, so each
+		// needs its own case — this one had none.
+		const h = createHarness(
+			{
+				head1Host: `127.0.0.1:${head1.port}`,
+				controlMode: 'controller',
+				gridPowerStateId: 'sunenergyxt500.0.total.gridPower',
+				pollInterval: 3600,
+				requestTimeout: 2000,
+			},
+			{ 'info.meterBound': true },
+		);
+		head1.reported.MM = 1;
+		await h.ready();
+		expect(head1.writes, 'a forced off must not touch the binding').to.deep.equal([]);
+		expect(h.states['info.meterBound']?.val).to.equal(true);
+		await h.unload();
+	});
+
 	it('keeps the meter binding when device mode is refused for having several heads', async () => {
 		const h = createHarness(
 			{
@@ -816,7 +863,7 @@ describe('adapter lifecycle: field mapping', function () {
 		await h.poll(1);
 		expect(h.objects['heads.1.control.GS']?.common?.max).to.equal(800);
 		const [head] = (h.instance as { headStates(): HeadState[] }).headStates();
-		expect(head.maxPower, 'and a PRO name still gets the full rating').to.equal(800);
+		expect(head.maxPower, 'the controller gets the same rating as the object bound').to.equal(800);
 	});
 
 	it('writes the narrowed bound once, not on every poll', async () => {

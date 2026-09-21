@@ -337,9 +337,10 @@ class Sunenergyxt500 extends utils.Adapter {
 			const src = (this.config.gridPowerStateId || '').trim();
 			if (!src) {
 				this.log.error(
-					'Controller mode is selected but no grid-power source state is configured. Falling back to ' +
-						'monitoring (off) and leaving the devices as they are — configure the source state, then ' +
-						'restart the instance.',
+					'Controller mode is selected but no grid-power source state is configured. Falling back ' +
+						"to monitoring (off) and leaving the devices' own regulation as it is — configure the " +
+						'source state, then restart the instance. A setpoint left over from an earlier run is ' +
+						'still cleared: nothing would be watching it.',
 				);
 				this.controlMode = 'off';
 				this.controlModeForced = true;
@@ -357,8 +358,6 @@ class Sunenergyxt500 extends utils.Adapter {
 		}
 
 		// Bring every head into the state required by the chosen control mode before polling.
-		// In controller mode the part that talks to hosts which are not configured any
-		// more is left out here and run below, together with the other two.
 		await this.enforceMode('startup');
 
 		if (this.controlMode === 'controller') {

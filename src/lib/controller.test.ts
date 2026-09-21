@@ -658,6 +658,18 @@ describe('MultiHeadController', () => {
 		expect(mock.states['controller.totalTarget']).to.equal(-1900);
 	});
 
+	it('sums the export limits of every head, not just the first', async () => {
+		// The twin of the case below. Taking the first head's export cap for the sum
+		// would hold two PRO together to what one of them may feed in.
+		const heads = [head({ index: 1 }), head({ index: 2 })];
+		const { hooks } = mockHooks(heads);
+		const mock = mockAdapter();
+		const ctrl = new MultiHeadController(mock.adapter, hooks, 'x.y.z', cfg({ maxStepW: 9000 }));
+		await ctrl.start();
+		await ctrl.onGridPower(4000, sampleClock()());
+		expect(mock.states['controller.totalTarget']).to.equal(4000);
+	});
+
 	it('sums the charge limits of every head, not just the first', async () => {
 		// Three heads take 7200 W between them. Taking the first head's limit for the sum
 		// capped the whole plant at what one of them can do.

@@ -210,7 +210,7 @@ class Sunenergyxt500 extends utils.Adapter {
       const src = (this.config.gridPowerStateId || "").trim();
       if (!src) {
         this.log.error(
-          "Controller mode is selected but no grid-power source state is configured. Falling back to monitoring (off) and leaving the devices as they are \u2014 configure the source state, then restart the instance."
+          "Controller mode is selected but no grid-power source state is configured. Falling back to monitoring (off) and leaving the devices' own regulation as it is \u2014 configure the source state, then restart the instance. A setpoint left over from an earlier run is still cleared: nothing would be watching it."
         );
         this.controlMode = "off";
         this.controlModeForced = true;
