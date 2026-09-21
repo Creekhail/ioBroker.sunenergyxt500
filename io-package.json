@@ -1,8 +1,21 @@
 {
 	"common": {
 		"name": "sunenergyxt500",
-		"version": "0.3.0",
+		"version": "0.3.1",
 		"news": {
+			"0.3.1": {
+				"en": "Fixes a blocker in 0.3.0: heads 2 and 3 were always marked invalid in the instance settings, which stopped the configuration from being saved at all. Anyone on 0.3.0 should update.",
+				"de": "Behebt einen Blocker in 0.3.0: Kopf 2 und 3 wurden in den Instanzeinstellungen immer als ungültig markiert, wodurch sich die Konfiguration überhaupt nicht speichern ließ. Wer 0.3.0 einsetzt, sollte aktualisieren.",
+				"ru": "Исправлена блокирующая ошибка в 0.3.0: блоки 2 и 3 всегда помечались в настройках экземпляра как недопустимые, из-за чего конфигурацию вообще нельзя было сохранить. Пользователям 0.3.0 следует обновиться.",
+				"pt": "Corrige um bloqueio na 0.3.0: as unidades 2 e 3 eram sempre marcadas como inválidas nas definições da instância, o que impedia totalmente guardar a configuração. Quem estiver na 0.3.0 deve atualizar.",
+				"nl": "Verhelpt een blocker in 0.3.0: units 2 en 3 werden in de instantie-instellingen altijd als ongeldig gemarkeerd, waardoor de configuratie helemaal niet kon worden opgeslagen. Wie op 0.3.0 zit, moet bijwerken.",
+				"fr": "Corrige un blocage dans la 0.3.0 : les unités 2 et 3 étaient toujours signalées comme invalides dans les paramètres de l'instance, ce qui empêchait totalement d'enregistrer la configuration. Mettez à jour si vous êtes en 0.3.0.",
+				"it": "Corregge un blocco nella 0.3.0: le unità 2 e 3 venivano sempre segnalate come non valide nelle impostazioni dell'istanza, impedendo del tutto il salvataggio della configurazione. Chi usa la 0.3.0 dovrebbe aggiornare.",
+				"es": "Corrige un bloqueo en la 0.3.0: las unidades 2 y 3 siempre se marcaban como no válidas en los ajustes de la instancia, lo que impedía guardar la configuración por completo. Quien esté en 0.3.0 debería actualizar.",
+				"pl": "Naprawia blokadę w 0.3.0: jednostki 2 i 3 były w ustawieniach instancji zawsze oznaczane jako nieprawidłowe, przez co w ogóle nie dało się zapisać konfiguracji. Użytkownicy 0.3.0 powinni zaktualizować.",
+				"uk": "Виправлено блокувальну помилку в 0.3.0: блоки 2 і 3 у налаштуваннях екземпляра завжди позначалися як недійсні, через що конфігурацію взагалі не вдавалося зберегти. Користувачам 0.3.0 слід оновитися.",
+				"zh-cn": "修复 0.3.0 中的阻塞性问题：实例设置中的机组 2 和 3 始终被标记为无效，导致配置完全无法保存。使用 0.3.0 的用户应当更新。"
+			},
 			"0.3.0": {
 				"en": "The controller respects the heads' own SoC hysteresis instead of commanding a head that refuses, and MG is treated as the feed-in cap only — a head with a lowered feed-in limit is no longer throttled while charging or supplying its load port. New: optional inverter-limit steering, a meter settling time, and a setpoint left on a head now survives a restart.",
 				"de": "Der Regler respektiert die geräteeigene SoC-Hysterese, statt einen Kopf zu kommandieren, der ablehnt, und MG gilt nur noch als Einspeisegrenze — ein Kopf mit gedrosselter Einspeisung wird beim Laden und beim Versorgen seines Last-Ports nicht mehr ausgebremst. Neu: optionale Steuerung der Wechselrichtergrenze, eine Zähler-Einschwingzeit, und ein auf einem Kopf stehender Sollwert überlebt jetzt einen Neustart.",
@@ -80,19 +93,6 @@
 				"pl": "Kontroler: konfigurowalna docelowa moc sieci (np. celowe pobieranie +10 W, aby nigdy nie wprowadzać zasilania) i maksymalna regulacja na krok korekcji (umożliwia wysokie wzmocnienie bez przeregulowania). Dokumentacja: wartość zadana GS ma rozdzielczość 1 W (a nie 10 W, jak udokumentowano wcześniej).",
 				"uk": "Контролер: настроювана цільова потужність мережі (наприклад, +10 Вт навмисне споживання, щоб ніколи не подаватись) і максимальне коригування на крок корекції (дозволяє високе посилення без перерегулювання). Документація: задане значення GS має роздільну здатність 1 Вт (а не 10 Вт, як було задокументовано раніше).",
 				"zh-cn": "控制器：可配置的目标电网功率（例如，+10 W 故意抽取，从不馈入）和每个校正步骤的最大调整（允许高增益而不会过冲）。文档：GS 设定点具有 1 W 分辨率（而不是之前记录的 10 W）。"
-			},
-			"0.2.5": {
-				"en": "Review follow-up: manufacturer/product link in the README and the controller now only accepts acknowledged grid-power values (ack=true) from the meter state.",
-				"de": "Review-Nacharbeit: Hersteller-/Produktlink im README, und der Regler akzeptiert nur noch bestätigte Netzleistungswerte (ack=true) vom Zähler-State.",
-				"ru": "Последующие действия по проверке: ссылка на производителя/продукт в файле README и контроллер теперь принимают только подтвержденные значения мощности сети (ack=true) из состояния счетчика.",
-				"pt": "Acompanhamento da revisão: link fabricante/produto no README e o controlador agora aceita apenas valores de potência da rede reconhecidos (ack=true) do estado do medidor.",
-				"nl": "Evaluatie vervolg: fabrikant/productkoppeling in de README en de controller accepteert nu alleen erkende netvermogenswaarden (ack=true) van de meterstatus.",
-				"fr": "Suivi de l'examen : lien fabricant/produit dans le fichier README et le contrôleur n'accepte désormais que les valeurs de puissance du réseau reconnues (ack=true) à partir de l'état du compteur.",
-				"it": "Follow-up della revisione: il collegamento produttore/prodotto nel file README e il controller ora accetta solo valori di potenza di rete riconosciuti (ack=true) dallo stato del contatore.",
-				"es": "Seguimiento de la revisión: enlace fabricante/producto en el archivo README y el controlador ahora solo acepta valores de potencia de red reconocidos (ack=true) del estado del medidor.",
-				"pl": "Kontynuacja przeglądu: link do producenta/produktu w pliku README i sterownik akceptuje teraz tylko potwierdzone wartości mocy sieci (ack=true) ze stanu licznika.",
-				"uk": "Подальший перегляд: посилання на виробника/продукт у файлі README, і контролер тепер приймає лише підтверджені значення потужності мережі (ack=true) із стану лічильника.",
-				"zh-cn": "查看后续内容：自述文件中的制造商/产品链接和控制器现在仅接受来自仪表状态的已确认的电网功率值 (ack=true)。"
 			}
 		},
 		"titleLang": {
