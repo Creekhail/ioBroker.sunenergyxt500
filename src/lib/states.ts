@@ -804,8 +804,11 @@ export interface MeterConfig {
 
 /**
  * Tasmota / BitShake energy-monitor subtypes and their `dat_str.pwr` key, from the
- * device's local API reference (section 5.4). Most subtypes report `Power`; a few
- * (LEPUS, PICUS, Smarty) report lowercase `power`. The admin UI offers these as a
+ * device's local API reference (section 5.4), all 57 of them in the document's order.
+ *
+ * Most report `Power`, a few lowercase `power`, and thirteen an expression the device
+ * evaluates itself (`power_in - power_out`, `(Pp - Pm) * 1000`). Those are passed through
+ * unchanged — the adapter does not interpret them. The admin UI offers the list as a
  * dropdown so the user picks a meter rather than guessing the JSON key.
  */
 export const TASMOTA_PWR_BY_SUBTYPE: Record<string, string> = {
@@ -831,12 +834,18 @@ export const TASMOTA_PWR_BY_SUBTYPE: Record<string, string> = {
 	Q3M: 'Power',
 	eBZ: 'Power',
 	SGM: 'Power',
+	AS1440: 'power_in - power_out',
 	AS2020: 'Power',
 	AS3500: 'Power',
+	T510: 'Power_total',
 	eBZD: 'Power',
 	ED300L: 'Power',
 	ED300S: 'Power',
+	eHZ: 'Power - Power2',
 	EMH: 'Power',
+	EHZ161: 'watt_l1 + watt_l2 + watt_l3',
+	EHZ361: 'watt_l1 + watt_l2 + watt_l3',
+	EHZ363: 'Power - Power2',
 	HBZ: 'Power',
 	DTZ: 'Power',
 	EHZ: 'Power',
@@ -849,8 +858,15 @@ export const TASMOTA_PWR_BY_SUBTYPE: Record<string, string> = {
 	Itron: 'Power',
 	KAIFA: 'Power',
 	E220: 'Power',
+	E230: 'Power_in * 1000',
 	E320: 'Power',
+	E350: 'Power_in * 1000',
+	E650: '((1-5-0) - (2-5-0)) * 1000',
+	ZMB120: '(kW_L1+L2+L3) * 1000',
 	L20: 'Power',
+	LK13BE: 'Power || current',
+	Metcom: 'power_in - power_out',
+	Siemens: '(Pp - Pm) * 1000',
 	Smarty: 'power',
 	SML: 'Power',
 };

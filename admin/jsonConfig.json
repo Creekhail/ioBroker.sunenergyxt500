@@ -611,12 +611,20 @@
 							"value": "SGM"
 						},
 						{
+							"label": "AS1440",
+							"value": "AS1440"
+						},
+						{
 							"label": "AS2020",
 							"value": "AS2020"
 						},
 						{
 							"label": "AS3500",
 							"value": "AS3500"
+						},
+						{
+							"label": "T510",
+							"value": "T510"
 						},
 						{
 							"label": "eBZD",
@@ -631,8 +639,24 @@
 							"value": "ED300S"
 						},
 						{
+							"label": "eHZ",
+							"value": "eHZ"
+						},
+						{
 							"label": "EMH",
 							"value": "EMH"
+						},
+						{
+							"label": "EHZ161",
+							"value": "EHZ161"
+						},
+						{
+							"label": "EHZ361",
+							"value": "EHZ361"
+						},
+						{
+							"label": "EHZ363",
+							"value": "EHZ363"
 						},
 						{
 							"label": "HBZ",
@@ -683,12 +707,40 @@
 							"value": "E220"
 						},
 						{
+							"label": "E230",
+							"value": "E230"
+						},
+						{
 							"label": "E320",
 							"value": "E320"
 						},
 						{
+							"label": "E350",
+							"value": "E350"
+						},
+						{
+							"label": "E650",
+							"value": "E650"
+						},
+						{
+							"label": "ZMB120",
+							"value": "ZMB120"
+						},
+						{
 							"label": "L20",
 							"value": "L20"
+						},
+						{
+							"label": "LK13BE",
+							"value": "LK13BE"
+						},
+						{
+							"label": "Metcom",
+							"value": "Metcom"
+						},
+						{
+							"label": "Siemens",
+							"value": "Siemens"
 						},
 						{
 							"label": "Smarty",

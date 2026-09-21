@@ -14,7 +14,10 @@ import {
 	measurementDefs,
 	roundTo,
 	subscribedControlPatterns,
+	TASMOTA_PWR_BY_SUBTYPE,
 } from './lib/states';
+import * as fs from 'fs';
+import * as path from 'path';
 
 describe('state name translations', () => {
 	const LANGS = ['ru', 'pt', 'nl', 'fr', 'it', 'es', 'pl', 'uk', 'zh-cn'];
@@ -194,6 +197,74 @@ describe('buildMeterMd', () => {
 	it('returns empty string for Tasmota with an unknown / unset subtype', () => {
 		expect(buildMeterMd({ type: 'tasmota', id: 'tas-prefix' })).to.equal('');
 		expect(buildMeterMd({ type: 'tasmota', id: 'tas-prefix', tasmotaSubtype: 'NOPE' })).to.equal('');
+	});
+
+	it('passes an expression subtype through unchanged', () => {
+		// Thirteen subtypes resolve to a term rather than a field name. The device
+		// evaluates it; anything this adapter did to it would only break it.
+		expect(
+			JSON.parse(buildMeterMd({ type: 'tasmota', id: 'tas', tasmotaSubtype: 'Siemens' })).dat_str,
+		).to.deep.equal({ pwr: '(Pp - Pm) * 1000' });
+		expect(
+			JSON.parse(buildMeterMd({ type: 'tasmota', id: 'tas', tasmotaSubtype: 'LK13BE' })).dat_str,
+		).to.deep.equal({ pwr: 'Power || current' });
+	});
+});
+
+describe('Tasmota subtype list', () => {
+	/**
+	 * The admin dropdown's option values, in the order the UI offers them.
+	 *
+	 * Found by searching rather than by a fixed path, so moving the field between tabs
+	 * does not fail this test for a reason that has nothing to do with the list.
+	 */
+	function dropdownValues(): string[] {
+		const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'admin', 'jsonConfig.json'), 'utf8'));
+		const find = (node: unknown): { options: { value: string }[] } | undefined => {
+			if (!node || typeof node !== 'object') {
+				return undefined;
+			}
+			const rec = node as Record<string, unknown>;
+			if (rec.meterTasmotaSubtype) {
+				return rec.meterTasmotaSubtype as { options: { value: string }[] };
+			}
+			for (const child of Object.values(rec)) {
+				const hit = find(child);
+				if (hit) {
+					return hit;
+				}
+			}
+			return undefined;
+		};
+		const field = find(cfg);
+		expect(field, 'the admin UI must offer a Tasmota subtype field').to.not.equal(undefined);
+		return field!.options.map(o => o.value);
+	}
+
+	it('offers exactly the subtypes the adapter can resolve', () => {
+		// The two are maintained by hand in different files, and they drifted: thirteen
+		// subtypes were in neither, so those meters could not be selected at all. A name
+		// in the dropdown that the map does not know yields an empty MD and a warning.
+		expect(dropdownValues()).to.deep.equal(Object.keys(TASMOTA_PWR_BY_SUBTYPE));
+	});
+
+	it('resolves every offered subtype to a non-empty power key', () => {
+		for (const subtype of dropdownValues()) {
+			expect(buildMeterMd({ type: 'tasmota', id: 'tas', tasmotaSubtype: subtype }), subtype).to.not.equal('');
+		}
+	});
+
+	it('keeps the model names untranslated in every language', () => {
+		// They are names, not words, and `npm run translate` does not know that: it turned
+		// Q3A into "Pytanie 3A", SGM into a Chinese company and eBZ into a chemical. A user
+		// scanning the dropdown for their meter would not find it.
+		const dir = path.join(__dirname, '..', 'admin', 'i18n');
+		for (const file of fs.readdirSync(dir)) {
+			const dict = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8')) as Record<string, string>;
+			for (const subtype of Object.keys(TASMOTA_PWR_BY_SUBTYPE)) {
+				expect(dict[subtype], `${file}: ${subtype}`).to.equal(subtype);
+			}
+		}
 	});
 });
 
