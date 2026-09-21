@@ -49,8 +49,23 @@ export interface HeadState {
 	socMin: number;
 	/** Maximum charge SoC limit in percent (SA). */
 	socMax: number;
-	/** Maximum charge/discharge power in W (e.g. 800 for 500, 2400 for 500 PRO). */
+	/**
+	 * Grid-connected *output* limit in W — the device field MG, which the operator sets
+	 * to cap feed-in (e.g. 800 for a plug-in system). Discharge only.
+	 */
 	maxPower: number;
+	/**
+	 * Charge limit in W. A separate figure: MG caps what the device puts out, not what
+	 * it takes in, and the manufacturer documents drawing as -2400..0 for both models.
+	 * Capping charge at MG left a 500, or a PRO with MG set to 800, charging at a third
+	 * of its rate while the surplus went to the grid.
+	 */
+	maxCharge: number;
+	/**
+	 * Inverter output limit in W (device field IS). Also separate from MG: IS covers
+	 * what the load port draws as well, so an export cap must not throttle it.
+	 */
+	maxInverter: number;
 	/** Reported load-port power LP in W (0 when nothing is wired to it). */
 	lp: number;
 	/** Reported PV power in W, used to cap the inverter limit on an empty battery. */
@@ -91,7 +106,7 @@ export interface HeadSetpoint {
  * @param totalGp Sum of the reported GP of all online heads (W, +feed-in).
  * @param gridPower House grid power normalized to ">0 = draw" (import).
  * @param gain Proportional gain.
- * @param sumMaxPower Sum of the online heads' maxPower (W).
+ * @param sumMaxPower Sum of the online heads' limit for the direction in question (W).
  */
 export function computeTotalTarget(totalGp: number, gridPower: number, gain: number, sumMaxPower: number): number {
 	const limit = Math.abs(sumMaxPower);
@@ -158,7 +173,7 @@ export function splitTarget(
 		return charging ? h.soc < h.socMax : h.soc > h.socMin;
 	};
 	// Per-head power cap, signed like the target.
-	const cap = (h: HeadState): number => (charging ? -Math.abs(h.maxPower) : Math.abs(h.maxPower));
+	const cap = (h: HeadState): number => (charging ? -Math.abs(h.maxCharge) : Math.abs(h.maxPower));
 
 	let pool = heads.filter(eligible);
 	let fixedSum = 0; // sum of the caps of heads already saturated
@@ -228,5 +243,5 @@ export function computeIsTarget(head: HeadState, gs: number): number {
 	if (head.soc <= head.socMin) {
 		target = Math.min(target, Math.max(head.pv, 0));
 	}
-	return Math.round(clamp(target, 0, Math.abs(head.maxPower)));
+	return Math.round(clamp(target, 0, Math.abs(head.maxInverter)));
 }

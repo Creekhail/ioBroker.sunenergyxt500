@@ -32,6 +32,7 @@ const WRITE_CONFIRM_DELAY_MS = 1500;
 const MAX_HEADS = 3;
 const CONTROL_DROP_AFTER_FAILURES = 3;
 const CONTROL_WRITE_TIMEOUT_MS = 2500;
+const DEVICE_MAX_W = 2400;
 const ALL_DEFS = [...import_states.measurementDefs, ...import_states.controlDefs];
 const MANAGED_ROOTS = /* @__PURE__ */ new Set(["heads", "total", "controller", "info"]);
 const LEGACY_ROOTS = /* @__PURE__ */ new Set(["battery", "grid", "load", "pv", "system", "device", "meter", "ups", "fault", "control"]);
@@ -521,7 +522,6 @@ class Sunenergyxt500 extends utils.Adapter {
       h.pv = (0, import_values.num)(data.PV);
       h.packs = Math.max(1, (_c = (0, import_values.num)(data.ON)) != null ? _c : 1);
       h.maxPower = (_d = (0, import_values.num)(data.MG)) != null ? _d : (0, import_values.fallbackMaxPower)(data);
-      h.maxPowerKnown = true;
       h.socMin = (_e = (0, import_values.num)(data.SI)) != null ? _e : (0, import_values.num)(data.SO);
       h.socMax = (0, import_values.num)(data.SA);
       h.socHysteresisDischarge = (0, import_values.num)(data.SI1);
@@ -937,20 +937,18 @@ class Sunenergyxt500 extends utils.Adapter {
     })();
   }
   /**
-   * The payload that neutralises one head, with the inverter limit handed back only
-   * when this adapter is holding one *and* the head's real maximum is known.
+   * The payload that neutralises one head, with the inverter limit handed back whenever
+   * this adapter is the one holding it.
    *
-   * Built in one place because the condition is easy to get wrong: before the first
-   * poll `maxPower` is the constructor default of 2400, which would hand a 500 three
-   * times its rating.
-   *
-   * @param h the head being neutralised
+   * The limit released is the device maximum, not the head's export cap: MG caps
+   * feed-in, while IS also covers the load port, so releasing to MG would leave a head
+   * whose owner capped feed-in throttled with nobody left to raise it again.
    */
-  neutralPayload(h) {
-    const releaseIs = !!this.config.controllerControlIs && h.maxPowerKnown === true;
+  neutralPayload() {
+    const releaseIs = !!this.config.controllerControlIs;
     return {
       releaseIs,
-      payload: releaseIs ? { GS: 0, IS: Math.round(Math.abs(h.maxPower)) } : { GS: 0 }
+      payload: releaseIs ? { GS: 0, IS: DEVICE_MAX_W } : { GS: 0 }
     };
   }
   /**
@@ -965,7 +963,7 @@ class Sunenergyxt500 extends utils.Adapter {
   async neutralizeAllGs(reason = "controller shutdown") {
     const results = await Promise.all(
       this.heads.map(async (h) => {
-        const { payload, releaseIs } = this.neutralPayload(h);
+        const { payload, releaseIs } = this.neutralPayload();
         try {
           await h.api.write(payload);
           this.log.info(
@@ -1052,11 +1050,12 @@ class Sunenergyxt500 extends utils.Adapter {
       return;
     }
     try {
-      const { payload, releaseIs } = this.neutralPayload(h);
+      const { payload, releaseIs } = this.neutralPayload();
       await h.api.write(payload);
-      this.log.info(`Head ${h.index}: GS neutralized to 0 (ownership cleanup, retry).`);
+      this.log.info(
+        `Head ${h.index}: GS neutralized to 0${releaseIs ? ", IS released to maximum" : ""} (ownership cleanup, retry).`
+      );
       this.gsCleanupDone.add((0, import_values.hostKey)(h.host));
-      void releaseIs;
       await this.finishCleanupIfDone();
     } catch (e) {
       this.log.debug(`Head ${h.index}: ownership cleanup retry failed: ${(0, import_values.errMsg)(e)}`);
@@ -1146,6 +1145,10 @@ class Sunenergyxt500 extends utils.Adapter {
         socMin: (_c = h.socMin) != null ? _c : 0,
         socMax: (_d = h.socMax) != null ? _d : 100,
         maxPower: h.maxPower,
+        // MG caps the output only. Drawing is documented as -2400..0 for both models,
+        // and IS as 1..2400 — the vendor's own integration lowers neither for a 500.
+        maxCharge: DEVICE_MAX_W,
+        maxInverter: DEVICE_MAX_W,
         lp: (_e = h.lp) != null ? _e : 0,
         pv: (_f = h.pv) != null ? _f : 0,
         // 5 % is the manufacturer default; assuming none would reintroduce the chatter.

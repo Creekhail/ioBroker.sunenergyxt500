@@ -19,6 +19,8 @@ function head(partial: Partial<HeadState> & { index: number }): HeadState {
 		socMin: 10,
 		socMax: 100,
 		maxPower: 2400,
+		maxCharge: 2400,
+		maxInverter: 2400,
 		lp: 0,
 		pv: 0,
 		socHysteresisDischarge: 5,
@@ -116,6 +118,18 @@ describe('splitTarget', () => {
 		const heads = [head({ index: 1, soc: 100 }), head({ index: 2, soc: 100 })];
 		expect(gs(heads, -1000)).to.deep.equal([0, 0]);
 	});
+	it('charges a head whose export cap is lower than its charge limit', () => {
+		// The case both reviews found independently: MG caps the output, not the intake.
+		// Capping charge at MG left a 500 — or a PRO whose owner set MG to 800 — taking
+		// a third of what it may, with the surplus going to the grid.
+		const heads = [head({ index: 1, maxPower: 800, maxCharge: 2400 })];
+		expect(splitTarget(-2000, heads)[0].gs).to.equal(-2000);
+	});
+
+	it('still caps discharging at the export limit', () => {
+		const heads = [head({ index: 1, maxPower: 800, maxCharge: 2400 })];
+		expect(splitTarget(2000, heads)[0].gs).to.equal(800);
+	});
 });
 
 describe('computeIsTarget', () => {
@@ -150,9 +164,17 @@ describe('computeIsTarget', () => {
 		expect(computeIsTarget(h, 600)).to.equal(0);
 	});
 
-	it('never exceeds the head power limit', () => {
-		const h = head({ index: 1, maxPower: 800, lp: 500 });
+	it('never exceeds the inverter limit', () => {
+		const h = head({ index: 1, maxInverter: 800, lp: 500 });
 		expect(computeIsTarget(h, 800)).to.equal(800);
+	});
+
+	it('is not throttled by a lowered export cap', () => {
+		// MG caps what the head feeds into the grid; the inverter also serves the load
+		// port. Capping IS at MG left a head whose owner set MG to the legal plug-in
+		// limit unable to supply its own load.
+		const h = head({ index: 1, maxPower: 800, maxInverter: 2400, lp: 1200 });
+		expect(computeIsTarget(h, 0)).to.equal(1200);
 	});
 
 	it('ignores a negative load-port reading (back-feed into the port)', () => {

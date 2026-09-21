@@ -167,6 +167,8 @@ function head(partial: Partial<HeadState> & { index: number }): HeadState {
 		socMin: 10,
 		socMax: 100,
 		maxPower: 2400,
+		maxCharge: 2400,
+		maxInverter: 2400,
 		lp: 0,
 		pv: 0,
 		socHysteresisDischarge: 5,
@@ -607,8 +609,51 @@ describe('MultiHeadController', () => {
 		expect(isWrites).to.deep.equal([{ index: 1, is: 1200 }]);
 	});
 
-	it('releases IS to the head maximum on failsafe', async () => {
-		const heads = [head({ index: 1, maxPower: 800 })];
+	it('charges beyond the export cap when the charge limit allows it', async () => {
+		// MG caps the output; the charge limit is the device's own and unaffected by it.
+		// Clamping the total to the summed export caps left a plant whose owner limited
+		// feed-in taking a third of the surplus it could have absorbed.
+		const heads = [head({ index: 1, maxPower: 800, maxCharge: 2400 })];
+		const { hooks } = mockHooks(heads);
+		const mock = mockAdapter();
+		const ctrl = new MultiHeadController(mock.adapter, hooks, 'x.y.z', cfg({ maxStepW: 5000 }));
+		await ctrl.start();
+		await ctrl.onGridPower(-2000, sampleClock()());
+		expect(mock.states['controller.totalTarget']).to.equal(-2000);
+	});
+
+	it('keeps the two caps apart inside the dead band as well', async () => {
+		// The dead band takes its own clamping path, so it needs its own case: the
+		// feed-forward base is held, and holding it at the export cap would walk a
+		// charging plant back to a third of its rate on the first quiet sample.
+		const heads = [head({ index: 1, maxPower: 800, maxCharge: 2400 })];
+		const { hooks } = mockHooks(heads);
+		const mock = mockAdapter();
+		const ctrl = new MultiHeadController(mock.adapter, hooks, 'x.y.z', cfg({ deadBandW: 100 }));
+		await ctrl.start();
+		const at = sampleClock();
+		await ctrl.onGridPower(-2000, at()); // outside the band: carries the base to -2000
+		await ctrl.onGridPower(-50, at()); // inside it: the base is held, not re-clamped
+		expect(mock.states['controller.totalTarget']).to.equal(-2000);
+	});
+
+	it('releases an uncontrollable head to the inverter maximum too', async () => {
+		// Its own release path, taken when a reachable head stops delivering SoC. It has
+		// to hand back the same figure as the failsafe: the export cap would leave the
+		// head throttled for as long as it keeps answering without usable data.
+		const heads = [head({ index: 1, controllable: false, maxPower: 800, maxInverter: 2400 })];
+		const { hooks, isWrites } = mockHooks(heads);
+		const ctrl = new MultiHeadController(mockAdapter().adapter, hooks, 'x.y.z', cfg({ controlIs: true }));
+		await ctrl.start();
+		isWrites.length = 0;
+		await ctrl.onGridPower(500, sampleClock()());
+		expect(isWrites).to.deep.equal([{ index: 1, is: 2400 }]);
+	});
+
+	it('releases IS to the inverter maximum, not the export cap, on failsafe', async () => {
+		// A head whose owner capped feed-in at 800 W still has a 2400 W inverter. Releasing
+		// to MG would hand it back throttled — and nothing raises it again.
+		const heads = [head({ index: 1, maxPower: 800, maxInverter: 2400 })];
 		const { hooks, isWrites } = mockHooks(heads);
 		const mock = mockAdapter();
 		const ctrl = new MultiHeadController(mock.adapter, hooks, 'x.y.z', cfg({ controlIs: true }));
@@ -618,7 +663,7 @@ describe('MultiHeadController', () => {
 		ageSource(ctrl, 300);
 		await (ctrl as unknown as { watchdogTick(): Promise<void> }).watchdogTick();
 		// Nothing maintains the limit while the controller is not regulating.
-		expect(isWrites).to.deep.equal([{ index: 1, is: 800 }]);
+		expect(isWrites).to.deep.equal([{ index: 1, is: 2400 }]);
 	});
 
 	it('ages the watchdog on unusable samples instead of staying healthy', async () => {

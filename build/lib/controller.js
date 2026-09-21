@@ -354,11 +354,12 @@ class MultiHeadController {
       },
       0
     );
-    const sumMax = heads.reduce((acc, h) => acc + Math.abs(h.maxPower), 0);
-    let totalTarget = inDeadBand ? Math.round(Math.max(-sumMax, Math.min(sumMax, base))) : (0, import_split.computeTotalTarget)(base, error, gain, sumMax);
+    const sumExport = heads.reduce((acc, h) => acc + Math.abs(h.maxPower), 0);
+    const sumCharge = heads.reduce((acc, h) => acc + Math.abs(h.maxCharge), 0);
+    let totalTarget = inDeadBand ? Math.round(Math.max(-sumCharge, Math.min(sumExport, base))) : (0, import_split.computeTotalTarget)(base, error, gain, error < 0 ? sumCharge : sumExport);
     if (maxStepW > 0 && !inDeadBand) {
-      const lo = Math.max(base - maxStepW, -sumMax);
-      const hi = Math.min(base + maxStepW, sumMax);
+      const lo = Math.max(base - maxStepW, -sumCharge);
+      const hi = Math.min(base + maxStepW, sumExport);
       totalTarget = Math.round(Math.max(lo, Math.min(hi, totalTarget)));
     }
     await this.adapter.setStateChangedAsync("controller.totalTarget", totalTarget, true);
@@ -517,8 +518,8 @@ class MultiHeadController {
     var _a;
     for (const h of heads) {
       if (h.online && !h.controllable) {
-        if (this.cfg.controlIs && this.lastIs.get(h.index) !== Math.round(Math.abs(h.maxPower))) {
-          await this.writeHeadIs(h.index, Math.round(Math.abs(h.maxPower)), true);
+        if (this.cfg.controlIs && this.lastIs.get(h.index) !== Math.round(Math.abs(h.maxInverter))) {
+          await this.writeHeadIs(h.index, Math.round(Math.abs(h.maxInverter)), true);
         }
         const commanded = this.lastGs.get(h.index);
         if (commanded === 0) {
@@ -694,15 +695,17 @@ class MultiHeadController {
     }
   }
   /**
-   * Restores IS to each head's maximum, so a controller that stops regulating (failsafe
-   * or shutdown) never leaves the inverter throttled at a limit nobody maintains.
+   * Restores IS to each head's inverter maximum, so a controller that stops regulating
+   * (failsafe or shutdown) never leaves the inverter throttled at a limit nobody
+   * maintains. Deliberately not the export cap: releasing to MG would leave a head whose
+   * owner capped feed-in unable to serve its own load port.
    */
   async releaseIs() {
     if (!this.cfg.controlIs) {
       return;
     }
     await Promise.all(
-      this.hooks.getHeads().filter((h) => h.online).map((h) => this.writeHeadIs(h.index, Math.round(Math.abs(h.maxPower)), true))
+      this.hooks.getHeads().filter((h) => h.online).map((h) => this.writeHeadIs(h.index, Math.round(Math.abs(h.maxInverter)), true))
     );
   }
   /**

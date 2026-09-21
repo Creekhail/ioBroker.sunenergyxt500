@@ -49,7 +49,7 @@ function splitTarget(totalTarget, heads, resuming = /* @__PURE__ */ new Set()) {
     }
     return charging ? h.soc < h.socMax : h.soc > h.socMin;
   };
-  const cap = (h) => charging ? -Math.abs(h.maxPower) : Math.abs(h.maxPower);
+  const cap = (h) => charging ? -Math.abs(h.maxCharge) : Math.abs(h.maxPower);
   let pool = heads.filter(eligible);
   let fixedSum = 0;
   for (let pass = 0; pass <= heads.length && pool.length > 0; pass++) {
@@ -90,7 +90,7 @@ function computeIsTarget(head, gs) {
   if (head.soc <= head.socMin) {
     target = Math.min(target, Math.max(head.pv, 0));
   }
-  return Math.round(clamp(target, 0, Math.abs(head.maxPower)));
+  return Math.round(clamp(target, 0, Math.abs(head.maxInverter)));
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

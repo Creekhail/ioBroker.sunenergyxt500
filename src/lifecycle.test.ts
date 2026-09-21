@@ -772,11 +772,10 @@ describe('adapter lifecycle: guarded mechanisms', function () {
 		await h.unload();
 	});
 
-	it('does not release a maximum it has read but not yet taken over', async () => {
-		// The first poll marks itself done before it copies the snapshot into the head's
-		// runtime fields, with two awaits in between. A shutdown landing in that window
-		// sees "the model is known" and hands back the constructor default — 2400 W to a
-		// head that has just reported 800.
+	it('releases the device inverter maximum, not the head export cap', async () => {
+		// MG is the grid-tied *output* cap; IS is 1..2400 on both models. Releasing IS to
+		// MG left a head whose owner capped feed-in at 800 W unable to serve its own load
+		// port, with nothing left running to raise it again.
 		const h = createHarness(
 			{
 				head1Host: `127.0.0.1:${head1.port}`,
@@ -790,46 +789,10 @@ describe('adapter lifecycle: guarded mechanisms', function () {
 		);
 		head1.reported.MG = 800; // a 500, not a PRO
 		await h.ready();
-		h.blockStateWrite('heads.1.info.rawResponse'); // park the poll mid-way
-		const poll = h.poll(1);
-		await new Promise(r => setTimeout(r, 60));
 		head1.writes.length = 0;
 		await h.unload();
-		h.releaseStateWrites();
-		await poll;
 		const released = head1.writes.find(w => 'IS' in w);
-		expect(released?.IS, 'never a maximum the head did not report').to.not.equal(2400);
-		expect(
-			head1.writes.some(w => w.GS === 0),
-			'the setpoint must still be neutralised',
-		).to.equal(true);
-	});
-
-	it('does not invent an inverter maximum on shutdown', async () => {
-		// Before the first successful poll `maxPower` is the constructor default of
-		// 2400 W. Handing that to a 500 (800 W) on the way out is the same invented
-		// maximum the startup cleanup already refuses to write.
-		const h = createHarness(
-			{
-				head1Host: `127.0.0.1:${head1.port}`,
-				controlMode: 'controller',
-				gridPowerStateId: 'shelly.0.total',
-				controllerControlIs: true,
-				pollInterval: 3600,
-				requestTimeout: 300,
-			},
-			{},
-		);
-		head1.reported.MG = 800; // a 500, not a PRO
-		head1.dead = true; // never polled, so the model stays unknown
-		await h.ready();
-		head1.dead = false;
-		head1.writes.length = 0;
-		await h.unload();
-		expect(
-			head1.writes.some(w => 'IS' in w),
-			'no limit may be written while the model is a guess',
-		).to.equal(false);
+		expect(released?.IS, 'the inverter maximum is model-independent').to.equal(2400);
 		expect(
 			head1.writes.some(w => w.GS === 0),
 			'the setpoint must still be neutralised',

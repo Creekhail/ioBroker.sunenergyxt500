@@ -535,15 +535,18 @@ export class MultiHeadController {
 			(acc, h) => acc + (this.ffBase.get(h.index) ?? (Number.isFinite(h.gp) ? h.gp : 0)),
 			0,
 		);
-		const sumMax = heads.reduce((acc, h) => acc + Math.abs(h.maxPower), 0);
+		// Two sums, because the two directions have different limits: MG caps the output,
+		// the charge limit is the device's own and larger on a head whose MG was lowered.
+		const sumExport = heads.reduce((acc, h) => acc + Math.abs(h.maxPower), 0);
+		const sumCharge = heads.reduce((acc, h) => acc + Math.abs(h.maxCharge), 0);
 		let totalTarget = inDeadBand
-			? Math.round(Math.max(-sumMax, Math.min(sumMax, base)))
-			: computeTotalTarget(base, error, gain, sumMax);
+			? Math.round(Math.max(-sumCharge, Math.min(sumExport, base)))
+			: computeTotalTarget(base, error, gain, error < 0 ? sumCharge : sumExport);
 		// Step limit: cap the movement per correction so a meter spike cannot slam
 		// the setpoint even with a high gain (manufacturer blueprint does the same).
 		if (maxStepW > 0 && !inDeadBand) {
-			const lo = Math.max(base - maxStepW, -sumMax);
-			const hi = Math.min(base + maxStepW, sumMax);
+			const lo = Math.max(base - maxStepW, -sumCharge);
+			const hi = Math.min(base + maxStepW, sumExport);
 			totalTarget = Math.round(Math.max(lo, Math.min(hi, totalTarget)));
 		}
 		// Published before the split so a "controller wants to charge but the heads do
@@ -732,8 +735,8 @@ export class MultiHeadController {
 			if (h.online && !h.controllable) {
 				// First and unconditionally: hanging it off the GS decision left a throttled limit
 				// on any head whose GS was already zero.
-				if (this.cfg.controlIs && this.lastIs.get(h.index) !== Math.round(Math.abs(h.maxPower))) {
-					await this.writeHeadIs(h.index, Math.round(Math.abs(h.maxPower)), true);
+				if (this.cfg.controlIs && this.lastIs.get(h.index) !== Math.round(Math.abs(h.maxInverter))) {
+					await this.writeHeadIs(h.index, Math.round(Math.abs(h.maxInverter)), true);
 				}
 				const commanded = this.lastGs.get(h.index);
 				if (commanded === 0) {
@@ -955,8 +958,10 @@ export class MultiHeadController {
 	}
 
 	/**
-	 * Restores IS to each head's maximum, so a controller that stops regulating (failsafe
-	 * or shutdown) never leaves the inverter throttled at a limit nobody maintains.
+	 * Restores IS to each head's inverter maximum, so a controller that stops regulating
+	 * (failsafe or shutdown) never leaves the inverter throttled at a limit nobody
+	 * maintains. Deliberately not the export cap: releasing to MG would leave a head whose
+	 * owner capped feed-in unable to serve its own load port.
 	 */
 	private async releaseIs(): Promise<void> {
 		if (!this.cfg.controlIs) {
@@ -966,7 +971,7 @@ export class MultiHeadController {
 			this.hooks
 				.getHeads()
 				.filter(h => h.online)
-				.map(h => this.writeHeadIs(h.index, Math.round(Math.abs(h.maxPower)), true)),
+				.map(h => this.writeHeadIs(h.index, Math.round(Math.abs(h.maxInverter)), true)),
 		);
 	}
 

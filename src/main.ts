@@ -57,6 +57,15 @@ const CONTROL_DROP_AFTER_FAILURES = 3;
  */
 const CONTROL_WRITE_TIMEOUT_MS = 2500;
 
+/**
+ * What a head can draw from the grid, and the ceiling for its inverter limit, in W.
+ *
+ * Both are documented as the same figure for the 500 and the 500 PRO; only the
+ * grid-connected *output* (MG, and with it GS upwards) is lower on a 500. Keeping
+ * this apart from `maxPower` is what stops an export cap from throttling charging.
+ */
+const DEVICE_MAX_W = 2400;
+
 /** All device-field definitions (measurements + controls), precomputed once. */
 const ALL_DEFS = [...measurementDefs, ...controlDefs];
 
@@ -153,15 +162,6 @@ interface HeadRuntime {
 	 * a timestamp at least as fresh as the adapter start.
 	 */
 	firstPollDone?: boolean;
-	/**
-	 * Whether `maxPower` holds the value this head actually reported.
-	 *
-	 * Separate from firstPollDone, which only means "the first poll has begun writing
-	 * states". Between the two lie awaits, and anything that hands the inverter limit
-	 * back in that window would use the constructor default — 2400 W to a head that may
-	 * be an 800 W model.
-	 */
-	maxPowerKnown?: boolean;
 	/** Latest snapshot used for the aggregates and (later) the controller split. */
 	soc?: number;
 	bp?: number;
@@ -697,9 +697,6 @@ class Sunenergyxt500 extends utils.Adapter {
 			// MG carries the head's max grid-tied output; if missing, derive the model
 			// limit (500 → 800 W, 500 PRO → 2400 W) instead of assuming a PRO.
 			h.maxPower = num(data.MG) ?? fallbackMaxPower(data);
-			// Set in the same synchronous run as the assignment above: an await between
-			// the two would reopen the window this flag exists to close.
-			h.maxPowerKnown = true;
 			h.socMin = num(data.SI) ?? num(data.SO);
 			h.socMax = num(data.SA);
 			// The device resumes only once the charge has moved this far back inside its limits.
@@ -1202,20 +1199,18 @@ class Sunenergyxt500 extends utils.Adapter {
 	}
 
 	/**
-	 * The payload that neutralises one head, with the inverter limit handed back only
-	 * when this adapter is holding one *and* the head's real maximum is known.
+	 * The payload that neutralises one head, with the inverter limit handed back whenever
+	 * this adapter is the one holding it.
 	 *
-	 * Built in one place because the condition is easy to get wrong: before the first
-	 * poll `maxPower` is the constructor default of 2400, which would hand a 500 three
-	 * times its rating.
-	 *
-	 * @param h the head being neutralised
+	 * The limit released is the device maximum, not the head's export cap: MG caps
+	 * feed-in, while IS also covers the load port, so releasing to MG would leave a head
+	 * whose owner capped feed-in throttled with nobody left to raise it again.
 	 */
-	private neutralPayload(h: HeadRuntime): { payload: Record<string, number>; releaseIs: boolean } {
-		const releaseIs = !!this.config.controllerControlIs && h.maxPowerKnown === true;
+	private neutralPayload(): { payload: Record<string, number>; releaseIs: boolean } {
+		const releaseIs = !!this.config.controllerControlIs;
 		return {
 			releaseIs,
-			payload: releaseIs ? { GS: 0, IS: Math.round(Math.abs(h.maxPower)) } : { GS: 0 },
+			payload: releaseIs ? { GS: 0, IS: DEVICE_MAX_W } : { GS: 0 },
 		};
 	}
 
@@ -1234,7 +1229,7 @@ class Sunenergyxt500 extends utils.Adapter {
 		// need the write most. In parallel, so trying them all costs no extra time.
 		const results = await Promise.all(
 			this.heads.map(async h => {
-				const { payload, releaseIs } = this.neutralPayload(h);
+				const { payload, releaseIs } = this.neutralPayload();
 				try {
 					await h.api.write(payload);
 					this.log.info(
@@ -1334,11 +1329,12 @@ class Sunenergyxt500 extends utils.Adapter {
 		try {
 			// IS goes in the same request, or a head cleaned up here keeps a throttled limit
 			// that nothing will lift.
-			const { payload, releaseIs } = this.neutralPayload(h);
+			const { payload, releaseIs } = this.neutralPayload();
 			await h.api.write(payload);
-			this.log.info(`Head ${h.index}: GS neutralized to 0 (ownership cleanup, retry).`);
+			this.log.info(
+				`Head ${h.index}: GS neutralized to 0${releaseIs ? ', IS released to maximum' : ''} (ownership cleanup, retry).`,
+			);
 			this.gsCleanupDone.add(hostKey(h.host));
-			void releaseIs;
 			// Measured against the hosts the *previous* run recorded, not the current
 			// configuration: a head removed in between must not make this look finished.
 			await this.finishCleanupIfDone();
@@ -1438,6 +1434,10 @@ class Sunenergyxt500 extends utils.Adapter {
 			socMin: h.socMin ?? 0,
 			socMax: h.socMax ?? 100,
 			maxPower: h.maxPower,
+			// MG caps the output only. Drawing is documented as -2400..0 for both models,
+			// and IS as 1..2400 — the vendor's own integration lowers neither for a 500.
+			maxCharge: DEVICE_MAX_W,
+			maxInverter: DEVICE_MAX_W,
 			lp: h.lp ?? 0,
 			pv: h.pv ?? 0,
 			// 5 % is the manufacturer default; assuming none would reintroduce the chatter.
