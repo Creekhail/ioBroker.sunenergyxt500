@@ -650,7 +650,7 @@ export const controlDefs: StateDef[] = [
 		role: 'level',
 		unit: 'W',
 		type: 'number',
-		name: { en: 'Max. grid feed-in / inverter output limit', de: 'Max. Netzeinspeisung / WR-Ausgangsgrenze' },
+		name: { en: 'Inverter output limit', de: 'Wechselrichter-Ausgangsgrenze' },
 		write: true,
 	},
 	{

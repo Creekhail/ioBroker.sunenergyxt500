@@ -33,6 +33,32 @@ describe('state name translations', () => {
 			}
 		}
 	});
+
+	it('cover the names written inline in the adapter as well', () => {
+		// The aggregates (total.*) and the info states are not in any exported def list,
+		// so the loop above never saw them — and a rename silently dropped their
+		// translations. Read them out of the source instead.
+		const sources = ['main.ts', path.join('lib', 'controller.ts')].map(f =>
+			fs.readFileSync(path.join(__dirname, f), 'utf8'),
+		);
+		const names = new Set<string>();
+		for (const src of sources) {
+			for (const m of src.matchAll(/en: '([^']*)'/g)) {
+				names.add(m[1]);
+			}
+			for (const m of src.matchAll(/en: "([^"]*)"/g)) {
+				names.add(m[1]);
+			}
+		}
+		expect(names.size, 'the scan has to find something').to.be.greaterThan(10);
+		for (const name of names) {
+			const entry = NAME_TRANSLATIONS[name];
+			expect(entry, `missing translations for "${name}"`).to.be.an('object');
+			for (const lang of LANGS) {
+				expect(entry[lang], `missing ${lang} for "${name}"`).to.be.a('string').and.not.equal('');
+			}
+		}
+	});
 });
 
 describe('cfgNum', () => {

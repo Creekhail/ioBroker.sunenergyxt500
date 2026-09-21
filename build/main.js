@@ -70,7 +70,12 @@ const AGGREGATE_DEFS = [
     id: "total.maxPower",
     role: "value.power",
     unit: "W",
-    name: { en: "Total available power (online heads)", de: "Gesamt verf\xFCgbare Leistung (Online-K\xF6pfe)" }
+    // The sum of MG, so it is what the plant may put OUT. It says nothing about what
+    // it may take in — those are separate limits on the device.
+    name: {
+      en: "Total grid-tied output limit (online heads)",
+      de: "Gesamt-Netzausgangsgrenze (Online-K\xF6pfe)"
+    }
   },
   {
     id: "total.onlineCount",
