@@ -259,6 +259,99 @@ describe('buildMeterMd', () => {
 	});
 });
 
+describe('admin config validators', () => {
+	/**
+	 * Every validator in jsonConfig.json, with its containing field name.
+	 */
+	function validators(): { field: string; expr: string; noSave: boolean }[] {
+		const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'admin', 'jsonConfig.json'), 'utf8'));
+		const found: { field: string; expr: string; noSave: boolean }[] = [];
+		const walk = (node: unknown): void => {
+			if (!node || typeof node !== 'object') {
+				return;
+			}
+			for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+				const v = value as { validator?: string; validatorNoSaveOnError?: boolean };
+				if (v && typeof v === 'object' && typeof v.validator === 'string') {
+					found.push({ field: key, expr: v.validator, noSave: !!v.validatorNoSaveOnError });
+				}
+				walk(value);
+			}
+		};
+		walk(cfg.items);
+		return found;
+	}
+
+	/**
+	 * Builds the function body exactly as ioBroker admin does.
+	 *
+	 * Admin uses `expr.includes('return') ? expr : 'return ' + expr`. An expression that
+	 * merely *contains* the word — ours embed `(function(v){return …})` helpers for host
+	 * normalisation — is therefore used verbatim as a body, evaluates as a statement and
+	 * yields undefined. With validatorNoSaveOnError that makes the field permanently red
+	 * and blocks saving the whole configuration. 0.3.0 shipped exactly that.
+	 *
+	 * @param expr the validator expression from jsonConfig.json
+	 */
+	function asAdminWould(expr: string): (data: Record<string, unknown>) => unknown {
+		const body = expr.includes('return') ? expr : `return ${expr}`;
+		return new Function('data', 'originalData', '_system', '_alive', '_common', '_socket', body) as (
+			data: Record<string, unknown>,
+		) => unknown;
+	}
+
+	it('returns a boolean the way admin evaluates them', () => {
+		const data = {
+			head1Host: '192.168.1.5',
+			head2Host: '',
+			head3Host: '',
+			controlMode: 'controller',
+			gridPowerStateId: 'shelly.0.total',
+		};
+		for (const { field, expr } of validators()) {
+			const result = asAdminWould(expr)(data);
+			expect(result, `${field}: admin gets ${String(result)} for a valid configuration`).to.be.a('boolean');
+		}
+	});
+
+	it('accepts a single head, which is what most installations run', () => {
+		const single = { head1Host: '192.168.1.5', head2Host: '', head3Host: '' };
+		for (const { field, expr } of validators()) {
+			if (!field.startsWith('head')) {
+				continue;
+			}
+			expect(asAdminWould(expr)(single), `${field} must not object to empty optional hosts`).to.equal(true);
+		}
+	});
+
+	it('still rejects a host that is already used by another head', () => {
+		const dup = { head1Host: '192.168.1.5', head2Host: 'http://192.168.1.5/', head3Host: '' };
+		const head2 = validators().find(v => v.field === 'head2Host');
+		expect(asAdminWould(head2!.expr)(dup), 'the same device written two ways is one device').to.equal(false);
+	});
+
+	it('carries an error text wherever it can block saving', () => {
+		const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'admin', 'jsonConfig.json'), 'utf8'));
+		const texts: string[] = [];
+		const walk = (node: unknown): void => {
+			if (!node || typeof node !== 'object') {
+				return;
+			}
+			for (const value of Object.values(node as Record<string, unknown>)) {
+				const v = value as { validator?: string; validatorErrorText?: string };
+				if (v && typeof v === 'object' && typeof v.validator === 'string') {
+					texts.push(v.validatorErrorText ?? '');
+				}
+				walk(value);
+			}
+		};
+		walk(cfg.items);
+		for (const t of texts) {
+			expect(t, 'a red field without a reason leaves the user guessing').to.not.equal('');
+		}
+	});
+});
+
 describe('Tasmota subtype list', () => {
 	/**
 	 * The admin dropdown's option values, in the order the UI offers them.

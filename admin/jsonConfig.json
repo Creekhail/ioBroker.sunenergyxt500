@@ -50,7 +50,7 @@
 				"head2Host": {
 					"type": "text",
 					"label": "Head 2 — IP / hostname (optional)",
-					"validator": "!data.head2Host || (function(v){return (v||'').trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/\\/+$/,'');})(data.head2Host) !== (function(v){return (v||'').trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/\\/+$/,'');})(data.head1Host)",
+					"validator": "return !data.head2Host || (function(v){return (v||'').trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/\\/+$/,'');})(data.head2Host) !== (function(v){return (v||'').trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/\\/+$/,'');})(data.head1Host)",
 					"validatorErrorText": "This host is already used by another head.",
 					"validatorNoSaveOnError": true,
 					"newLine": true,
@@ -72,7 +72,7 @@
 				"head3Host": {
 					"type": "text",
 					"label": "Head 3 — IP / hostname (optional)",
-					"validator": "!data.head3Host || ((function(v){return (v||'').trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/\\/+$/,'');})(data.head3Host) !== (function(v){return (v||'').trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/\\/+$/,'');})(data.head1Host) && (function(v){return (v||'').trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/\\/+$/,'');})(data.head3Host) !== (function(v){return (v||'').trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/\\/+$/,'');})(data.head2Host))",
+					"validator": "return !data.head3Host || ((function(v){return (v||'').trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/\\/+$/,'');})(data.head3Host) !== (function(v){return (v||'').trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/\\/+$/,'');})(data.head1Host) && (function(v){return (v||'').trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/\\/+$/,'');})(data.head3Host) !== (function(v){return (v||'').trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/\\/+$/,'');})(data.head2Host))",
 					"validatorErrorText": "This host is already used by another head.",
 					"validatorNoSaveOnError": true,
 					"newLine": true,
