@@ -532,7 +532,9 @@ class Sunenergyxt500 extends utils.Adapter {
       h.lp = (0, import_values.num)(data.LP);
       h.pv = (0, import_values.num)(data.PV);
       h.packs = Math.max(1, (_c = (0, import_values.num)(data.ON)) != null ? _c : 1);
-      h.maxPower = (_d = (0, import_values.num)(data.MG)) != null ? _d : (0, import_values.fallbackMaxPower)(data);
+      const modelMax = (0, import_values.fallbackMaxPower)(data);
+      h.maxPower = (_d = (0, import_values.num)(data.MG)) != null ? _d : modelMax;
+      await this.applyModelLimit(h, modelMax);
       h.socMin = (_e = (0, import_values.num)(data.SI)) != null ? _e : (0, import_values.num)(data.SO);
       h.socMax = (0, import_values.num)(data.SA);
       h.socHysteresisDischarge = (0, import_values.num)(data.SI1);
@@ -616,6 +618,41 @@ class Sunenergyxt500 extends utils.Adapter {
       await this.setState(id, { val: value, ack: true });
     }
     this.confirmedCache.set(id, value);
+  }
+  /**
+   * The upper bound a manual write to this field must respect on this head.
+   *
+   * @param def the field being written
+   * @param h the head it is being written to
+   */
+  effectiveMax(def, h) {
+    if (!def.modelLimited || def.max === void 0 || h.modelMax === void 0) {
+      return def.max;
+    }
+    return Math.min(def.max, h.modelMax);
+  }
+  /**
+   * Narrows the output fields' upper bound to what this head's model is rated for,
+   * once a poll has said which model it is.
+   *
+   * The objects are created before the first poll, when the model is still unknown, so
+   * they start at the PRO bound. Writing them on every poll would be a database update
+   * per head per cycle, hence the change check.
+   *
+   * @param h the polled head
+   * @param modelMax the head's rating in W, derived from the model
+   */
+  async applyModelLimit(h, modelMax) {
+    if (h.modelMax === modelMax) {
+      return;
+    }
+    h.modelMax = modelMax;
+    for (const def of ALL_DEFS) {
+      const max = this.effectiveMax(def, h);
+      if (def.modelLimited && max !== void 0) {
+        await this.extendObject(`heads.${h.index}.${def.id}`, { common: { max } });
+      }
+    }
   }
   /**
    * Writes the device fields (MM/MD) required by the active control mode for every
@@ -829,7 +866,7 @@ class Sunenergyxt500 extends utils.Adapter {
    * @param state the new state
    */
   async handleControlWrite(relId, state) {
-    var _a, _b;
+    var _a;
     const m = /^heads\.(\d+)\.(.+)$/.exec(relId);
     if (!m) {
       return;
@@ -874,9 +911,10 @@ class Sunenergyxt500 extends utils.Adapter {
         this.log.warn(`Ignoring invalid value for ${relId}: ${state.val}`);
         return;
       }
-      if (def.min !== void 0 && n < def.min || def.max !== void 0 && n > def.max) {
+      const max = this.effectiveMax(def, h);
+      if (def.min !== void 0 && n < def.min || max !== void 0 && n > max) {
         this.log.warn(
-          `Ignoring out-of-range value for ${relId}: ${n} (allowed ${(_a = def.min) != null ? _a : "-\u221E"}\u2026${(_b = def.max) != null ? _b : "\u221E"}).`
+          `Ignoring out-of-range value for ${relId}: ${n} (allowed ${(_a = def.min) != null ? _a : "-\u221E"}\u2026${max != null ? max : "\u221E"}).`
         );
         return;
       }

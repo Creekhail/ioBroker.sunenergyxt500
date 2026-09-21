@@ -45,6 +45,14 @@ export interface StateDef {
 	/** Highest value accepted for a manual write (inclusive). */
 	max?: number;
 	/**
+	 * Whether `max` drops to the model limit on a standard 500 (800 W instead of 2400).
+	 *
+	 * Only the grid-tied *output* is rated lower on the small model; what it draws and
+	 * what its inverter may produce are the same on both, so this is not simply "every
+	 * power field".
+	 */
+	modelLimited?: boolean;
+	/**
 	 * If set, the value is computed from the whole reported object instead of a
 	 * single field (e.g. PK is derived from DevType on newer firmware).
 	 */
@@ -622,6 +630,7 @@ export const controlDefs: StateDef[] = [
 		field: 'GS',
 		min: -2400,
 		max: 2400,
+		modelLimited: true,
 		role: 'level',
 		unit: 'W',
 		type: 'number',
@@ -634,7 +643,9 @@ export const controlDefs: StateDef[] = [
 	{
 		id: 'control.IS',
 		field: 'IS',
-		min: 0,
+		// 0 is not "no limit": the device documents 1..2400, and the vendor's integration
+		// offers the same. A written 0 would ask the inverter to produce nothing at all.
+		min: 1,
 		max: 2400,
 		role: 'level',
 		unit: 'W',
@@ -716,6 +727,7 @@ export const controlDefs: StateDef[] = [
 		field: 'MG',
 		min: 1,
 		max: 2400,
+		modelLimited: true,
 		role: 'level',
 		unit: 'W',
 		type: 'number',

@@ -23,6 +23,7 @@ import { expect } from 'chai';
 import * as http from 'http';
 import type { AddressInfo } from 'net';
 import * as path from 'path';
+import type { HeadState } from './lib/split';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 
@@ -573,6 +574,229 @@ describe('adapter lifecycle', function () {
  * mechanism the rest of the suite depends on but never asserts directly — the class
  * of gap where a test looks like it covers something and does not.
  */
+/**
+ * The response from section 3.1 of the manufacturer's API document, field for field.
+ *
+ * One exception: II/VP are sent as tenths by the device, and both this adapter and the
+ * vendor's own integration scale them by 0.1. The document's example writes them already
+ * scaled (`II1: 2.1`, `VP1: 219.0`) — which is why the values below are the tenths that
+ * produce them, and why the expectations further down are the document's own numbers.
+ */
+const API_SAMPLE: Record<string, unknown> = {
+	SN: 'TBe072a1edb090',
+	PK: 2,
+	ST: 1,
+	PV: 1820,
+	PV1: 460,
+	PV2: 455,
+	PV3: 450,
+	PV4: 455,
+	II1: 21,
+	II2: 21,
+	II3: 20,
+	II4: 21,
+	VP1: 2190,
+	VP2: 2186,
+	VP3: 2188,
+	VP4: 2189,
+	IW: 1820,
+	OP: 1510,
+	GP: -1530,
+	LP: 0,
+	BP: 1450,
+	SC: 54,
+	SC0: 54,
+	PD: 6230,
+	GD1: 5683,
+	GD2: 4789,
+	LD: 0,
+	GS: -1550,
+	IS: 2400,
+	LM: 0,
+	MM: 1,
+	MS: 1,
+	IP: '192.168.1.102',
+	COM: 80,
+	ES: '1.1.3',
+	AS: '1.0.6',
+	DS: '1.0.5',
+	BS0: '4.0.5',
+	timestamp: 1712476800000,
+};
+
+describe('adapter lifecycle: field mapping', function () {
+	this.timeout(30000);
+	let head1: FakeHead;
+
+	beforeEach(async () => {
+		head1 = await startHead();
+		head1.reported = { ...API_SAMPLE };
+	});
+
+	afterEach(async () => {
+		await head1.close();
+	});
+
+	/**
+	 * Builds a harness in monitoring mode — no control path, so nothing writes back.
+	 */
+	function monitorOnly(): Harness {
+		return createHarness({
+			head1Host: `127.0.0.1:${head1.port}`,
+			controlMode: 'off',
+			pollInterval: 3600,
+			requestTimeout: 2000,
+		});
+	}
+
+	it('publishes every field of the documented response where it belongs', async () => {
+		// The gap every review named: each field is mapped in exactly one place, so a
+		// transposed pair (GP into BP, a sign, a scale) passes every other test in here.
+		const h = monitorOnly();
+		await h.ready();
+		await h.poll(1);
+		const v = (id: string): unknown => h.states[`heads.1.${id}`]?.val;
+		expect({
+			sn: v('device.SN'),
+			pk: v('device.PK'),
+			st: v('device.ST'),
+			pv: v('pv.PV'),
+			mppt: [v('pv.mppt1.PV1'), v('pv.mppt2.PV2'), v('pv.mppt3.PV3'), v('pv.mppt4.PV4')],
+			current: [v('pv.mppt1.II1'), v('pv.mppt2.II2'), v('pv.mppt3.II3'), v('pv.mppt4.II4')],
+			voltage: [v('pv.mppt1.VP1'), v('pv.mppt2.VP2'), v('pv.mppt3.VP3'), v('pv.mppt4.VP4')],
+			iw: v('system.IW'),
+			op: v('system.OP'),
+			gp: v('grid.GP'),
+			lp: v('load.LP'),
+			bp: v('battery.BP'),
+			sc: v('battery.SC'),
+			sc0: v('battery.SC0'),
+			pd: v('pv.PD'),
+			gd1: v('grid.GD1'),
+			gd2: v('grid.GD2'),
+			ld: v('load.LD'),
+			gs: v('control.GS'),
+			is: v('control.IS'),
+			lm: v('control.LM'),
+			mm: v('control.MM'),
+			ms: v('meter.MS'),
+			ip: v('device.network.IP'),
+			com: v('device.network.COM'),
+			firmware: [
+				v('device.firmware.ES'),
+				v('device.firmware.AS'),
+				v('device.firmware.DS'),
+				v('device.firmware.BS0'),
+			],
+			timestamp: v('info.timestamp'),
+		}).to.deep.equal({
+			sn: 'TBe072a1edb090',
+			pk: 2,
+			st: 1,
+			pv: 1820,
+			mppt: [460, 455, 450, 455],
+			current: [2.1, 2.1, 2, 2.1],
+			voltage: [219, 218.6, 218.8, 218.9],
+			iw: 1820,
+			op: 1510,
+			gp: -1530, // negative = import, as the document defines it
+			lp: 0,
+			bp: 1450, // positive = charging, the opposite sign convention to GP
+			sc: 54,
+			sc0: 54,
+			pd: 6230, // Wh, unscaled — the vendor's integration shows the same figure in kWh
+			gd1: 5683,
+			gd2: 4789,
+			ld: 0,
+			gs: -1550,
+			is: 2400,
+			lm: false, // LM/MM are 0/1 on the wire and boolean here
+			mm: true,
+			ms: 1,
+			ip: '192.168.1.102',
+			com: 80,
+			firmware: ['1.1.3', '1.0.6', '1.0.5', '4.0.5'],
+			timestamp: 1712476800000,
+		});
+	});
+
+	it('hands the controller the same reading, in its own terms', async () => {
+		// The second half of the same gap: the states can be right while the snapshot the
+		// split works from reads a field from the wrong place.
+		const h = monitorOnly();
+		await h.ready();
+		await h.poll(1);
+		const heads = (h.instance as { headStates(): HeadState[] }).headStates();
+		expect(heads.length).to.equal(1);
+		const [head] = heads;
+		expect({ gp: head.gp, soc: head.soc, lp: head.lp, pv: head.pv }).to.deep.equal({
+			gp: -1530,
+			soc: 54,
+			lp: 0,
+			pv: 1820,
+		});
+		// MG is absent from the documented response; the model decides, and PK=2 is a PRO.
+		expect(head.maxPower).to.equal(2400);
+	});
+
+	it('refuses a manual write above what the model is rated for', async () => {
+		// Until a poll says otherwise the objects carry the PRO bound, so this can only be
+		// enforced from the model — and only for the output fields. A 500 takes the same
+		// 2400 W in and its inverter is rated the same, so lowering those too would block
+		// writes the device would have accepted.
+		head1.reported = { ...API_SAMPLE, PK: 1, GS: 0 };
+		const h = monitorOnly();
+		await h.ready();
+		await h.poll(1);
+		head1.writes.length = 0;
+		await h.write('heads.1.control.GS', 1500);
+		expect(head1.writes, 'above the 800 W rating').to.deep.equal([]);
+		await h.write('heads.1.control.IS', 1500);
+		expect(head1.writes, 'the inverter limit is not model-bound').to.deep.equal([{ IS: 1500 }]);
+		head1.writes.length = 0;
+		await h.write('heads.1.control.MG', 1500);
+		expect(head1.writes, 'the export cap is bounded by the rating as well').to.deep.equal([]);
+	});
+
+	it('takes the rating from the model, not from the export cap in force', async () => {
+		// A PRO whose owner capped feed-in at 800 W is still a PRO. Deriving the bound
+		// from MG would lock them out of ever raising their own setting again.
+		head1.reported = { ...API_SAMPLE, PK: 2, MG: 800, GS: 0 };
+		const h = monitorOnly();
+		await h.ready();
+		await h.poll(1);
+		head1.writes.length = 0;
+		await h.write('heads.1.control.MG', 2400);
+		expect(head1.writes, 'raising a self-imposed cap must stay possible').to.deep.equal([{ MG: 2400 }]);
+	});
+
+	it('refuses IS=0, which the device does not offer', async () => {
+		// The documented range is 1..2400. Zero reads like "no limit" and is the opposite:
+		// it would ask the inverter to produce nothing at all.
+		const h = monitorOnly();
+		await h.ready();
+		await h.poll(1);
+		head1.writes.length = 0;
+		await h.write('heads.1.control.IS', 0);
+		expect(head1.writes).to.deep.equal([]);
+		expect(h.logs.some(l => l.level === 'warn' && l.message.includes('out-of-range'))).to.equal(true);
+	});
+
+	it('takes the 800 W model limit from PK, not from a guess', async () => {
+		head1.reported = { ...API_SAMPLE, PK: 1, GS: 0 };
+		const h = monitorOnly();
+		await h.ready();
+		await h.poll(1);
+		const [head] = (h.instance as { headStates(): HeadState[] }).headStates();
+		expect(head.maxPower, 'PK=1 is the 800 W model').to.equal(800);
+		expect(h.objects['heads.1.control.GS']?.common?.max, 'and the writable bound follows it').to.equal(800);
+		expect(
+			h.objects['heads.1.control.IS']?.common?.max,
+			'while the inverter limit stays at the device maximum',
+		).to.equal(2400);
+	});
+});
+
 describe('adapter lifecycle: guarded mechanisms', function () {
 	this.timeout(20000);
 	let head1: FakeHead;

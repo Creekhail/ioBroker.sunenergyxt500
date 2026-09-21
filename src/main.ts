@@ -176,6 +176,13 @@ interface HeadRuntime {
 	socHysteresisCharge?: number;
 	packs: number;
 	maxPower: number;
+	/**
+	 * The head's rating in W, from the model alone — 800 for a 500, 2400 for a PRO.
+	 *
+	 * Deliberately not `maxPower`: that follows MG, so an owner who has capped feed-in
+	 * would be locked out of raising it again by a bound derived from their own setting.
+	 */
+	modelMax?: number;
 	socMin?: number;
 	socMax?: number;
 	/** Consecutive failed polls; drives the back-off in nextPollDelay(). */
@@ -707,7 +714,9 @@ class Sunenergyxt500 extends utils.Adapter {
 			h.packs = Math.max(1, num(data.ON) ?? 1);
 			// MG carries the head's max grid-tied output; if missing, derive the model
 			// limit (500 → 800 W, 500 PRO → 2400 W) instead of assuming a PRO.
-			h.maxPower = num(data.MG) ?? fallbackMaxPower(data);
+			const modelMax = fallbackMaxPower(data);
+			h.maxPower = num(data.MG) ?? modelMax;
+			await this.applyModelLimit(h, modelMax);
 			h.socMin = num(data.SI) ?? num(data.SO);
 			h.socMax = num(data.SA);
 			// The device resumes only once the charge has moved this far back inside its limits.
@@ -803,6 +812,43 @@ class Sunenergyxt500 extends utils.Adapter {
 			await this.setState(id, { val: value, ack: true });
 		}
 		this.confirmedCache.set(id, value);
+	}
+
+	/**
+	 * The upper bound a manual write to this field must respect on this head.
+	 *
+	 * @param def the field being written
+	 * @param h the head it is being written to
+	 */
+	private effectiveMax(def: StateDef, h: HeadRuntime): number | undefined {
+		if (!def.modelLimited || def.max === undefined || h.modelMax === undefined) {
+			return def.max;
+		}
+		return Math.min(def.max, h.modelMax);
+	}
+
+	/**
+	 * Narrows the output fields' upper bound to what this head's model is rated for,
+	 * once a poll has said which model it is.
+	 *
+	 * The objects are created before the first poll, when the model is still unknown, so
+	 * they start at the PRO bound. Writing them on every poll would be a database update
+	 * per head per cycle, hence the change check.
+	 *
+	 * @param h the polled head
+	 * @param modelMax the head's rating in W, derived from the model
+	 */
+	private async applyModelLimit(h: HeadRuntime, modelMax: number): Promise<void> {
+		if (h.modelMax === modelMax) {
+			return;
+		}
+		h.modelMax = modelMax;
+		for (const def of ALL_DEFS) {
+			const max = this.effectiveMax(def, h);
+			if (def.modelLimited && max !== undefined) {
+				await this.extendObject(`heads.${h.index}.${def.id}`, { common: { max } });
+			}
+		}
 	}
 
 	/**
@@ -1118,9 +1164,10 @@ class Sunenergyxt500 extends utils.Adapter {
 			}
 			// The device is not obliged to sanity-check what it is sent, and a typo in a
 			// script (GS=99999, SI=150) would otherwise go straight to the hardware.
-			if ((def.min !== undefined && n < def.min) || (def.max !== undefined && n > def.max)) {
+			const max = this.effectiveMax(def, h);
+			if ((def.min !== undefined && n < def.min) || (max !== undefined && n > max)) {
 				this.log.warn(
-					`Ignoring out-of-range value for ${relId}: ${n} (allowed ${def.min ?? '-∞'}…${def.max ?? '∞'}).`,
+					`Ignoring out-of-range value for ${relId}: ${n} (allowed ${def.min ?? '-∞'}…${max ?? '∞'}).`,
 				);
 				return;
 			}

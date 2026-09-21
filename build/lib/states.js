@@ -590,6 +590,7 @@ const controlDefs = [
     field: "GS",
     min: -2400,
     max: 2400,
+    modelLimited: true,
     role: "level",
     unit: "W",
     type: "number",
@@ -602,7 +603,9 @@ const controlDefs = [
   {
     id: "control.IS",
     field: "IS",
-    min: 0,
+    // 0 is not "no limit": the device documents 1..2400, and the vendor's integration
+    // offers the same. A written 0 would ask the inverter to produce nothing at all.
+    min: 1,
     max: 2400,
     role: "level",
     unit: "W",
@@ -684,6 +687,7 @@ const controlDefs = [
     field: "MG",
     min: 1,
     max: 2400,
+    modelLimited: true,
     role: "level",
     unit: "W",
     type: "number",
