@@ -165,6 +165,12 @@ class MultiHeadController {
   isWriteFailures = /* @__PURE__ */ new Map();
   /** Per-head timestamp of the last foreign-GS warning, used to debounce it. */
   lastForeignGsLog = /* @__PURE__ */ new Map();
+  /**
+   * Heads whose GS echo no longer matches the command record. The next write path
+   * resends their setpoint even though `lastGs` says it is already in place — without
+   * this a head that rebooted to GS=0 stays there for as long as the target holds still.
+   */
+  resendGs = /* @__PURE__ */ new Set();
   /** Per-head start of an episode without usable SoC data, used to warn once per episode. */
   notControllableSince = /* @__PURE__ */ new Map();
   /** Per-head timestamp of the last neutralisation attempt for an uncontrollable head. */
@@ -378,7 +384,7 @@ class MultiHeadController {
       const totalMoved = Math.abs(totalTarget - this.lastTotalTarget) >= this.cfg.writeDeadBandW;
       const due = setpoints.filter((sp) => {
         const prev = this.lastGs.get(sp.index);
-        if (prev === void 0) {
+        if (prev === void 0 || this.resendGs.has(sp.index)) {
           return true;
         }
         const moved = Math.abs(sp.gs - prev);
@@ -467,6 +473,7 @@ class MultiHeadController {
   forgetHead(index) {
     this.lastGs.delete(index);
     this.ffBase.delete(index);
+    this.resendGs.delete(index);
     this.lastIs.delete(index);
     this.notControllableSince.delete(index);
     this.saturatedDischarge.delete(index);
@@ -636,6 +643,7 @@ class MultiHeadController {
       this.lastWriteDoneTs = Date.now();
       this.lastGs.set(index, gs);
       this.ffBase.set(index, gs);
+      this.resendGs.delete(index);
       const failed = this.writeFailures.get(index);
       if (failed) {
         this.writeFailures.delete(index);
@@ -741,9 +749,11 @@ class MultiHeadController {
    * outside this adapter wrote GS (the vendor app, or a second automation). Manual
    * writes through ioBroker cannot cause this — those are rejected in controller mode.
    *
-   * This only warns. Adopting the foreign value would make the loop follow whoever
-   * wrote last, and the P term corrects the resulting offset through the grid error
-   * anyway; what the operator needs is to learn that two controllers are fighting.
+   * The foreign value is never adopted: that would make the loop follow whoever wrote
+   * last. Instead the head is marked for a resend, so the next cycle puts the
+   * controller's own setpoint back even if the target has not moved — and the operator
+   * is told that two controllers are fighting. A device that restarted also lands here,
+   * reporting GS=0 before the poll failures would have dropped it from the loop.
    *
    * @param index 1-based head number
    * @param gs the head's polled GS echo in W
@@ -774,12 +784,19 @@ class MultiHeadController {
     if (Math.abs(gs - commanded) <= FOREIGN_GS_DEVIATION_W) {
       return;
     }
+    this.resendGs.add(index);
     const now = Date.now();
     const last = (_a = this.lastForeignGsLog.get(index)) != null ? _a : 0;
     if (now - last < FOREIGN_GS_LOG_INTERVAL_MS) {
       return;
     }
     this.lastForeignGsLog.set(index, now);
+    if (Math.round(gs) === 0) {
+      this.adapter.log.info(
+        `Head ${index}: device reports GS=0 W but the controller commanded ${commanded} W \u2014 it probably restarted. Sending the setpoint again.`
+      );
+      return;
+    }
     this.adapter.log.warn(
       `Head ${index}: device reports GS=${Math.round(gs)} W but the controller commanded ${commanded} W \u2014 something else is writing GS (vendor app, or a second automation). Run only one zero feed-in control path at a time.`
     );
@@ -793,7 +810,7 @@ class MultiHeadController {
    * (used by the repeating failsafe tick to avoid retry/log spam on offline heads)
    */
   async writeAll(gs, onlineOnly = false) {
-    const due = this.hooks.getHeads().filter((h) => !onlineOnly || h.online && this.lastGs.get(h.index) !== gs);
+    const due = this.hooks.getHeads().filter((h) => !onlineOnly || h.online && (this.lastGs.get(h.index) !== gs || this.resendGs.has(h.index)));
     await Promise.all(due.map((h) => this.writeHeadGs(h.index, gs)));
   }
   /**

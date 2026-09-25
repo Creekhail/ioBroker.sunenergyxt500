@@ -585,6 +585,47 @@ describe('MultiHeadController', () => {
 		expect(mock.warnings).to.deep.equal([]);
 	});
 
+	it('resends the setpoint after a device restart even when the target holds still', async () => {
+		// Seen on a 500 PRO: a short reboot came back with GS=0, too quick to drop the head
+		// from the loop. The target stayed where it was, so nothing counted as due and the
+		// storage sat idle in full sun.
+		const heads = [head({ index: 1 })];
+		const { hooks, writes } = mockHooks(heads);
+		const mock = mockAdapter();
+		const ctrl = new MultiHeadController(mock.adapter, hooks, 'x.y.z', cfg());
+		await ctrl.start();
+		const at = sampleClock();
+		await ctrl.onGridPower(1000, at()); // commands GS=1000
+		ageWrite(ctrl, 20000);
+		ctrl.noteReportedGs(1, 0); // the restarted device lost it
+		writes.length = 0;
+		await ctrl.onGridPower(0, at()); // on target: the total stays at 1000
+		expect(writes).to.deep.equal([{ index: 1, gs: 1000 }]);
+		expect(mock.infos.some(m => m.includes('probably restarted'))).to.equal(true);
+		// A zero echo is the restart signature, not a second controller.
+		expect(mock.warnings.filter(w => w.includes('something else is writing GS'))).to.deep.equal([]);
+		// Resent once — with the echo matching again, a steady target writes nothing.
+		ageWrite(ctrl, 20000);
+		ctrl.noteReportedGs(1, 1000);
+		writes.length = 0;
+		await ctrl.onGridPower(0, at());
+		expect(writes).to.deep.equal([]);
+	});
+
+	it('puts its own setpoint back over a foreign GS instead of adopting it', async () => {
+		const heads = [head({ index: 1 })];
+		const { hooks, writes } = mockHooks(heads);
+		const ctrl = new MultiHeadController(mockAdapter().adapter, hooks, 'x.y.z', cfg());
+		await ctrl.start();
+		const at = sampleClock();
+		await ctrl.onGridPower(1000, at());
+		ageWrite(ctrl, 20000);
+		ctrl.noteReportedGs(1, 250); // written by the vendor app or a second automation
+		writes.length = 0;
+		await ctrl.onGridPower(0, at());
+		expect(writes).to.deep.equal([{ index: 1, gs: 1000 }]);
+	});
+
 	it('leaves IS alone unless it is switched on', async () => {
 		const heads = [head({ index: 1 })];
 		const { hooks, isWrites } = mockHooks(heads);
