@@ -1,8 +1,21 @@
 {
 	"common": {
 		"name": "sunenergyxt500",
-		"version": "0.3.1",
+		"version": "0.3.2",
 		"news": {
+			"0.3.2": {
+				"en": "Fixes the controller going quiet after a short restart of a head: the device came back with setpoint 0 while the controller still considered its last setpoint in place, so the storage stayed idle until the load changed. A setpoint the device no longer reports is now sent again.",
+				"de": "Behebt, dass der Regler nach einem kurzen Neustart eines Kopfes verstummte: Das Gerät kam mit Sollwert 0 zurück, der Regler hielt seinen letzten Sollwert aber für gesetzt, und der Speicher blieb untätig, bis sich die Last änderte. Einen Sollwert, den das Gerät nicht mehr meldet, sendet er jetzt erneut.",
+				"ru": "Исправлено: после короткого перезапуска блока регулятор переставал отправлять команды — устройство возвращалось с уставкой 0, а регулятор считал свою последнюю уставку действующей, и накопитель простаивал до изменения нагрузки. Уставка, которую устройство больше не сообщает, теперь отправляется повторно.",
+				"pt": "Corrige o controlador que ficava parado após um reinício curto de uma unidade: o dispositivo voltava com o valor de referência 0, enquanto o controlador considerava o seu último valor ainda ativo, e o armazenamento ficava inativo até a carga mudar. Um valor de referência que o dispositivo já não reporta é agora enviado de novo.",
+				"nl": "Verhelpt dat de regelaar na een korte herstart van een unit stil bleef: het apparaat kwam terug met setpoint 0, terwijl de regelaar zijn laatste setpoint nog als actief beschouwde, waardoor de opslag stil bleef tot de belasting veranderde. Een setpoint dat het apparaat niet meer meldt, wordt nu opnieuw verzonden.",
+				"fr": "Corrige l'arrêt du régulateur après un court redémarrage d'une unité : l'appareil revenait avec une consigne à 0 alors que le régulateur considérait sa dernière consigne comme appliquée, et le stockage restait inactif jusqu'à un changement de charge. Une consigne que l'appareil ne signale plus est désormais renvoyée.",
+				"it": "Corregge il regolatore che restava inattivo dopo un breve riavvio di un'unità: il dispositivo tornava con setpoint 0 mentre il regolatore considerava ancora valido il suo ultimo setpoint, e l'accumulo restava fermo finché il carico non cambiava. Un setpoint che il dispositivo non riporta più viene ora inviato di nuovo.",
+				"es": "Corrige que el regulador se quedara inactivo tras un reinicio breve de una unidad: el dispositivo volvía con consigna 0 mientras el regulador daba por aplicada su última consigna, y el almacenamiento quedaba parado hasta que cambiaba la carga. Una consigna que el dispositivo ya no informa se envía ahora de nuevo.",
+				"pl": "Naprawia zatrzymanie regulatora po krótkim restarcie jednostki: urządzenie wracało z wartością zadaną 0, a regulator uznawał swoją ostatnią wartość za nadal obowiązującą, więc magazyn stał bezczynnie aż do zmiany obciążenia. Wartość zadana, której urządzenie już nie zgłasza, jest teraz wysyłana ponownie.",
+				"uk": "Виправлено: після короткого перезапуску блока регулятор замовкав — пристрій повертався з уставкою 0, а регулятор вважав свою останню уставку чинною, і накопичувач простоював до зміни навантаження. Уставку, яку пристрій більше не повідомляє, тепер надсилається повторно.",
+				"zh-cn": "修复机组短暂重启后调节器停止工作的问题：设备重启后设定值为 0，而调节器仍认为其上一个设定值有效，储能因此一直闲置，直到负载发生变化。设备不再报告的设定值现在会重新发送。"
+			},
 			"0.3.1": {
 				"en": "Fixes a blocker in 0.3.0: heads 2 and 3 were always marked invalid in the instance settings, which stopped the configuration from being saved at all. Anyone on 0.3.0 should update.",
 				"de": "Behebt einen Blocker in 0.3.0: Kopf 2 und 3 wurden in den Instanzeinstellungen immer als ungültig markiert, wodurch sich die Konfiguration überhaupt nicht speichern ließ. Wer 0.3.0 einsetzt, sollte aktualisieren.",
@@ -80,19 +93,6 @@
 				"pl": "Nowa kontrola adaptacyjna (domyślnie włączona): sterownik reguluje na trzech sprawdzonych przez producenta poziomach — delikatnie przy małych odchyleniach, natychmiast przy krokach obciążenia. Usuń zaznaczenie pola wyboru, aby kontynuować strojenie ręcznie; Dzięki tej aktualizacji istniejące instalacje zostaną przełączone na adaptacyjne. Ponadto: teksty pomocy administratora, wymaga administratora >= 7.8.23.",
 				"uk": "Нове адаптивне керування (увімкнено за замовчуванням): контролер регулює на трьох перевірених виробником рівнях — м’яко при невеликих відхиленнях, відразу при ступенях навантаження. Зніміть прапорець, щоб продовжити налаштування вручну; наявні інсталяції перемикаються на адаптивні з цим оновленням. Також: тексти довідки для адміністратора, потрібен адміністратор >= 7.8.23.",
 				"zh-cn": "新的自适应控制（默认启用）：控制器按制造商验证的三个级别进行调节 - 对小偏差进行温和调节，对负载阶跃立即进行调节。禁用该复选框以继续手动调整；现有安装通过此更新切换为自适应。另外：管理员帮助文本，需要管理员 >= 7.8.23。"
-			},
-			"0.2.6": {
-				"en": "Controller: configurable target grid power (e.g. +10 W deliberate draw to never feed in) and a maximum adjustment per correction step (allows a high gain without overshoot). Documentation: the GS setpoint has 1 W resolution (not 10 W as previously documented).",
-				"de": "Regler: einstellbare Ziel-Netzleistung (z. B. +10 W bewusster Bezug, um nie einzuspeisen) und eine maximale Änderung pro Korrekturschritt (erlaubt hohe Verstärkung ohne Überschwingen). Doku: der GS-Sollwert hat 1-W-Auflösung (nicht 10 W wie zuvor dokumentiert).",
-				"ru": "Контроллер: настраиваемая целевая мощность сети (например, намеренное потребление +10 Вт, чтобы никогда не подавать) и максимальная регулировка на шаг коррекции (обеспечивает высокий коэффициент усиления без перерегулирования). Документация: уставка GS имеет разрешение 1 Вт (а не 10 Вт, как описано ранее).",
-				"pt": "Controlador: potência de rede alvo configurável (por exemplo, consumo deliberado de +10 W para nunca alimentar) e um ajuste máximo por etapa de correção (permite um alto ganho sem overshoot). Documentação: o ponto de ajuste GS tem resolução de 1 W (não 10 W conforme documentado anteriormente).",
-				"nl": "Controller: configureerbaar doelnetvermogen (bijv. +10 W bewuste afname om nooit terug te leveren) en een maximale aanpassing per correctiestap (maakt een hoge winst mogelijk zonder overshoot). Documentatie: het GS-instelpunt heeft een resolutie van 1 W (niet 10 W zoals eerder gedocumenteerd).",
-				"fr": "Contrôleur : puissance du réseau cible configurable (par exemple, consommation délibérée de +10 W pour ne jamais alimenter) et réglage maximum par étape de correction (permet un gain élevé sans dépassement). Documentation : le point de consigne GS a une résolution de 1 W (et non de 10 W comme documenté précédemment).",
-				"it": "Controller: potenza di rete target configurabile (ad esempio +10 W di assorbimento deliberato per non immettere mai) e una regolazione massima per fase di correzione (consente un guadagno elevato senza superamento). Documentazione: il setpoint GS ha una risoluzione di 1 W (non 10 W come precedentemente documentato).",
-				"es": "Controlador: potencia de red objetivo configurable (por ejemplo, +10 W de consumo deliberado para no inyectar nunca) y un ajuste máximo por paso de corrección (permite una alta ganancia sin sobrepasar). Documentación: el punto de ajuste GS tiene una resolución de 1 W (no 10 W como se documentó anteriormente).",
-				"pl": "Kontroler: konfigurowalna docelowa moc sieci (np. celowe pobieranie +10 W, aby nigdy nie wprowadzać zasilania) i maksymalna regulacja na krok korekcji (umożliwia wysokie wzmocnienie bez przeregulowania). Dokumentacja: wartość zadana GS ma rozdzielczość 1 W (a nie 10 W, jak udokumentowano wcześniej).",
-				"uk": "Контролер: настроювана цільова потужність мережі (наприклад, +10 Вт навмисне споживання, щоб ніколи не подаватись) і максимальне коригування на крок корекції (дозволяє високе посилення без перерегулювання). Документація: задане значення GS має роздільну здатність 1 Вт (а не 10 Вт, як було задокументовано раніше).",
-				"zh-cn": "控制器：可配置的目标电网功率（例如，+10 W 故意抽取，从不馈入）和每个校正步骤的最大调整（允许高增益而不会过冲）。文档：GS 设定点具有 1 W 分辨率（而不是之前记录的 10 W）。"
 			}
 		},
 		"titleLang": {

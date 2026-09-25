@@ -198,6 +198,9 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### 0.3.2 (2026-09-25)
+* (Creekhail) **Fixed: after a short head restart the controller could stop writing altogether.** A head that reboots comes back with `GS=0`, and if it answers again before three polls have failed, it never leaves the control loop. The controller still believed its last setpoint was in place, and as long as its target held still — steady surplus, or a head refusing charge with the anti-windup pulling it back to the same step — nothing counted as due, so the storage sat idle in full sun until the load changed or the instance was restarted. A `GS` echo that differs from the commanded value now marks the head for a resend, whether a restart or a second writer caused it. The foreign value is still never adopted; the controller puts its own back. A zero echo is logged as a probable restart rather than blamed on a second controller.
+
 ### 0.3.1 (2026-09-21)
 * (Creekhail) **Fixed a blocker in 0.3.0: the instance configuration could not be saved.** Heads 2 and 3 were marked invalid whatever was in them — including the empty fields a single-head installation leaves — and because those fields refuse to save while invalid, the whole settings page was stuck. The cause was a validator expression that ioBroker admin evaluated as a statement instead of a condition; it now returns its result explicitly. 0.2.10 was not affected.
 
