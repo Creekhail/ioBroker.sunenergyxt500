@@ -207,7 +207,7 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 0.3.3 (2026-09-27)
 * (Creekhail) **Settings survive a head restart again.** Firmware 1.1.5 does not keep values written through the local API: after a restart the head comes back with an older stored set, and with local mode on nothing else can change them. Found on a 500 PRO when a discharge floor raised to 10 % was back at 5 % after a restart; a test showed the same for the off-grid floor and the self-consumption mode. The head also falls back to that older set on its own at night, without a restart: at 03:00 it switched self-consumption mode off while running, which in device self-regulation would have ended the regulation for the rest of the night. The adapter now remembers the settings you make through it (SoC limits and hysteresis, inverter and grid output limits, the load-port switches) in `heads.<n>.info.desiredSettings` and writes them again when the head reports something else. On by default, with an option to turn it off; values set before this version are not known to the adapter, so set them once again. Firmware that keeps its settings sees no extra writes.
 
 ### 0.3.2 (2026-09-25)
