@@ -40,6 +40,14 @@ export interface StateDef {
 	states?: Record<number, string>;
 	/** Whether the state is writable (control field sent back via /write) */
 	write?: boolean;
+	/**
+	 * Whether a value the operator set through the adapter is put back when the head
+	 * reports a different one — firmware 1.1.15 loses API-written settings on restart.
+	 * Left off for fields a control mode owns (GS, MM/MD), for triggers (RT), for LM
+	 * (forcing local mode is not the adapter's call) and for TZ, which the head may
+	 * echo in a different form than written.
+	 */
+	restore?: boolean;
 	/** Lowest value accepted for a manual write (inclusive). */
 	min?: number;
 	/** Highest value accepted for a manual write (inclusive). */
@@ -347,6 +355,7 @@ export const measurementDefs: StateDef[] = [
 		type: 'number',
 		name: { en: 'Discharge SoC hysteresis', de: 'Entlade-SoC-Hysterese' },
 		write: true,
+		restore: true,
 	},
 	{
 		id: 'battery.SA1',
@@ -361,6 +370,7 @@ export const measurementDefs: StateDef[] = [
 		type: 'number',
 		name: { en: 'Charge SoC hysteresis', de: 'Lade-SoC-Hysterese' },
 		write: true,
+		restore: true,
 	},
 	// Device / status
 	{
@@ -662,6 +672,7 @@ export const controlDefs: StateDef[] = [
 		type: 'number',
 		name: { en: 'Inverter output limit', de: 'Wechselrichter-Ausgangsgrenze' },
 		write: true,
+		restore: true,
 	},
 	{
 		id: 'control.SI',
@@ -673,6 +684,7 @@ export const controlDefs: StateDef[] = [
 		type: 'number',
 		name: { en: 'Min. discharge SoC (grid mode)', de: 'Min. Entlade-SoC (Netzbetrieb)' },
 		write: true,
+		restore: true,
 	},
 	{
 		id: 'control.SA',
@@ -684,6 +696,7 @@ export const controlDefs: StateDef[] = [
 		type: 'number',
 		name: { en: 'Max. charge SoC (grid mode)', de: 'Max. Lade-SoC (Netzbetrieb)' },
 		write: true,
+		restore: true,
 	},
 	{
 		id: 'control.SO',
@@ -695,6 +708,7 @@ export const controlDefs: StateDef[] = [
 		type: 'number',
 		name: { en: 'Min. discharge SoC (off-grid mode)', de: 'Min. Entlade-SoC (Inselbetrieb)' },
 		write: true,
+		restore: true,
 	},
 	{
 		id: 'control.MM',
@@ -743,6 +757,7 @@ export const controlDefs: StateDef[] = [
 		type: 'number',
 		name: { en: 'Max. grid-tied output power', de: 'Max. netzgekoppelte Ausgangsleistung' },
 		write: true,
+		restore: true,
 	},
 	{
 		// Warning: LM=1 blocks cloud/app remote control until reset.
@@ -760,6 +775,7 @@ export const controlDefs: StateDef[] = [
 		type: 'boolean',
 		name: { en: 'Load priority switch', de: 'Lastprioritäts-Schalter' },
 		write: true,
+		restore: true,
 	},
 	{
 		id: 'control.LPS',
@@ -768,6 +784,7 @@ export const controlDefs: StateDef[] = [
 		type: 'boolean',
 		name: { en: 'Off-grid output switch', de: 'Inselausgang-Schalter' },
 		write: true,
+		restore: true,
 	},
 	{
 		id: 'control.PM',
@@ -776,6 +793,7 @@ export const controlDefs: StateDef[] = [
 		type: 'boolean',
 		name: { en: 'Parallel mode', de: 'Parallel-Modus' },
 		write: true,
+		restore: true,
 	},
 ];
 

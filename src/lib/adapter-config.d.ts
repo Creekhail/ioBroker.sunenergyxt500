@@ -14,6 +14,9 @@ declare global {
 			head3Label: string;
 			pollInterval: number;
 			requestTimeout: number;
+			// Put operator settings back when a head reports different ones (firmware 1.1.15
+			// forgets API-written values on restart). Missing on older configs = on.
+			restoreSettings: boolean;
 			// Control mode selector: off = monitoring only, controller = adapter drives
 			// GS across all heads (Mode B), device = a single storage self-regulates from a
 			// bound meter (Mode A, only available with exactly one head).

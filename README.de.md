@@ -64,6 +64,7 @@ In beiden Steuermodi **besitzt der Adapter `MM`**: bei jedem Poll prüft er das 
 * **Test all heads** — fragt jeden konfigurierten Kopf ab und meldet Modell + SoC (oder einen Fehler), damit du die Adressen vor dem Speichern prüfen kannst.
 * **Abfrageintervall (s)** — wie oft jeder Kopf per `/read` abgefragt wird (Standard 5 s).
 * **Anfrage-Timeout (ms)** — HTTP-Timeout (Standard 8000 ms).
+* **Einstellungen nach Kopf-Neustart wiederherstellen** (Standard an) — siehe *Einstellungen nach einem Kopf-Neustart* weiter unten.
 
 **Steuerung** — einen **Steuermodus** wählen:
 
@@ -133,7 +134,7 @@ Jeder Kopf erhält seinen eigenen Teilbaum unter **`heads.<n>.*`** (`n` = 1…3)
 | `heads.<n>.ups.*` | USV-Modus / Netzladen / Bypass (`UO`/`UG`/`FP`) |
 | `heads.<n>.fault.*` | Fehler-Bitmasks (`TF`/`EF`/`DF1`/`DF2`/`AF1`/`AF2`/`BF`) — nur im aktiven Fehlerfall befüllt |
 | `heads.<n>.control.*` | alle **schreibbaren** Felder (siehe unten) |
-| `heads.<n>.info.*` | pro Kopf `online`, `lastError`, `rawResponse` (komplette `/read`-Rohantwort) |
+| `heads.<n>.info.*` | pro Kopf `online`, `lastError`, `rawResponse` (komplette `/read`-Rohantwort), `desiredSettings` (über einen Kopf-Neustart gehaltene Einstellungen, JSON) |
 | `total.*` | Gesamtsicht: kapazitätsgewichteter `soc`, summierte `batteryPower` / `gridPower` / `maxPower`, `onlineCount` |
 | `controller.*` | Telemetrie des Eigenverbrauchsreglers (`status`, Alter der Netzquelle) |
 | `info.*` | `connection` (mind. ein Kopf erreichbar) und `lastUpdate` |
@@ -162,6 +163,14 @@ Per ioBroker-Konvention liegen alle schreibbaren Felder unter dem `control.*` je
 > Tipp: Im ioBroker-Admin kannst du die Objektliste auch nach dem *beschreibbar*-Flag filtern, um alle Steuerfelder auf einmal zu finden.
 
 `device.PK` wird aus `DevType` abgeleitet, wenn die Firmware `PK` nicht mehr liefert. `SI1`/`SA1` sind schreibbar (SoC-Hysterese, Standard 5 %); weiterhin reservierte Felder (`PT`) sind read-only. Vom Hersteller entfernte (`UP`) oder reine Doku-Artefakte (`WT`, `BN`) werden nicht angelegt; alles Ungemappte steht weiterhin in `heads.<n>.info.rawResponse`.
+
+### Einstellungen nach einem Kopf-Neustart
+
+Firmware 1.1.5 (gemeldet als `ES` 1.1.15) behält über die lokale API geschriebene Werte nicht: Nach einem Neustart meldet sich der Kopf mit einem älteren gespeicherten Stand zurück, und nachts fällt er auch ohne Neustart von selbst darauf zurück (beobachtet um 03:00). Im lokalen Modus kann auch die Hersteller-App sie nicht ändern, eine über diesen Adapter gesetzte Einstellung fiele also still zurück und bliebe so.
+
+Der Adapter merkt sich deshalb, was du über ihn setzt — `SI`, `SA`, `SO`, `SI1`, `SA1`, `IS`, `MG` sowie die Schalter `LFB`, `LPS`, `PM` — in `heads.<n>.info.desiredSettings` und schreibt einen Wert erneut, sobald der Kopf einen anderen meldet (Log-Stufe info). Verweigert ein Kopf einen Wert dauerhaft, versucht der Adapter es seltener und meldet nach drei Versuchen eine Warnung. `GS`, `MM` und `MD` regelt der Steuermodus, `RT` ist ein Auslöser, `LM` wird nie erzwungen, und `TZ` bleibt außen vor, weil der Kopf es in anderer Form zurückmelden kann, als es geschrieben wurde.
+
+Gemerkt werden nur Werte, die nach dem Update auf eine Version mit dieser Funktion gesetzt wurden — setze sie also einmal über den Adapter. Auf Firmware, die ihre Einstellungen behält, weicht nie etwas ab, und es wird nichts geschrieben. Schalte die Option aus, wenn ein anderes Werkzeug diese Einstellungen verwaltet.
 
 ## Manuelle Zähler-/Modus-Felder (MM / MD)
 

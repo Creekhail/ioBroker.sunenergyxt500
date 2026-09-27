@@ -29,9 +29,27 @@ import {
 	subscribedControlPatterns,
 } from './lib/states';
 import { asString, errMsg, fallbackMaxPower, hostKey, num } from './lib/values';
+import { type DesiredSettings, findDrift, parseDesired } from './lib/restore';
 
 /** Delay before re-reading the device to confirm a control write. */
 const WRITE_CONFIRM_DELAY_MS = 1500;
+
+/**
+ * Quiet period after the operator set a value before it is compared again. The head
+ * applies a write asynchronously, so the next poll may still carry the old value.
+ */
+const RESTORE_SETTLE_MS = 15000;
+
+/** Gap between restore attempts while a head keeps reporting a different setting. */
+const RESTORE_RETRY_MS = 60000;
+
+/**
+ * Attempts after which a setting that does not stick is reported as a warning, and
+ * the slower retry gap that follows: a head refusing a value should not be written
+ * to every minute for good.
+ */
+const RESTORE_WARN_AFTER = 3;
+const RESTORE_SLOW_RETRY_MS = 15 * 60000;
 
 /** Maximum number of heads a single instance manages. */
 const MAX_HEADS = 3;
@@ -68,6 +86,9 @@ const DEVICE_MAX_W = 2400;
 
 /** All device-field definitions (measurements + controls), precomputed once. */
 const ALL_DEFS = [...measurementDefs, ...controlDefs];
+
+/** API fields whose operator setting is put back after a head restart. */
+const RESTORABLE_FIELDS: ReadonlySet<string> = new Set(ALL_DEFS.filter(d => d.restore).map(d => d.field));
 
 /**
  * Top-level ids of the current object tree. The startup cleanup only reconciles below
@@ -192,6 +213,14 @@ interface HeadRuntime {
 	socMax?: number;
 	/** Consecutive failed polls; drives the back-off in nextPollDelay(). */
 	pollFailures: number;
+	/** Settings the operator wrote through the adapter, restored when the head loses them. */
+	desired: DesiredSettings;
+	/** When `desired` last changed; the comparison waits RESTORE_SETTLE_MS after it. */
+	desiredAt: number;
+	/** Restore attempts in the current episode of drift; 0 while everything matches. */
+	restoreAttempts: number;
+	/** Time of the last restore attempt, for the retry gap. */
+	restoreLastTry: number;
 }
 
 class Sunenergyxt500 extends utils.Adapter {
@@ -291,6 +320,10 @@ class Sunenergyxt500 extends utils.Adapter {
 				packs: 1,
 				maxPower: 2400,
 				pollFailures: 0,
+				desired: {},
+				desiredAt: 0,
+				restoreAttempts: 0,
+				restoreLastTry: 0,
 			});
 		}
 
@@ -318,6 +351,10 @@ class Sunenergyxt500 extends utils.Adapter {
 		}
 
 		await this.createObjects();
+		for (const h of this.heads) {
+			const st = await this.getStateAsync(`heads.${h.index}.info.desiredSettings`);
+			h.desired = parseDesired(st?.val, RESTORABLE_FIELDS);
+		}
 		for (const pattern of subscribedControlPatterns(ALL_DEFS)) {
 			this.subscribeStates(pattern);
 		}
@@ -463,6 +500,17 @@ class Sunenergyxt500 extends utils.Adapter {
 			});
 			await ensure(`${base}.info.rawResponse`, {
 				name: loc({ en: 'Raw /read response (JSON)', de: 'Rohantwort /read (JSON)' }),
+				type: 'string',
+				role: 'json',
+				read: true,
+				write: false,
+				def: '',
+			});
+			await ensure(`${base}.info.desiredSettings`, {
+				name: loc({
+					en: 'Settings restored after a head restart (JSON)',
+					de: 'Nach Kopf-Neustart wiederhergestellte Einstellungen (JSON)',
+				}),
 				type: 'string',
 				role: 'json',
 				read: true,
@@ -725,6 +773,7 @@ class Sunenergyxt500 extends utils.Adapter {
 			}
 			h.firstPollDone = true;
 			await this.guardMeterMode(h, data);
+			await this.restoreSettings(h, data);
 			await this.setStateChangedAsync(`${base}.info.rawResponse`, body, true);
 
 			h.soc = num(data.SC);
@@ -835,6 +884,82 @@ class Sunenergyxt500 extends utils.Adapter {
 			await this.setState(id, { val: value, ack: true });
 		}
 		this.confirmedCache.set(id, value);
+	}
+
+	/**
+	 * Remembers a setting the operator wrote through the adapter, so it can be put back
+	 * when the head loses it on a restart.
+	 *
+	 * @param h the head it was written to
+	 * @param field the API field
+	 * @param value the value sent to the head
+	 */
+	private async recordDesired(h: HeadRuntime, field: string, value: number): Promise<void> {
+		h.desired = { ...h.desired, [field]: value };
+		h.desiredAt = Date.now();
+		h.restoreAttempts = 0;
+		await this.setState(`heads.${h.index}.info.desiredSettings`, {
+			val: JSON.stringify(h.desired),
+			ack: true,
+		});
+	}
+
+	/**
+	 * Puts back settings the head no longer reports as the operator set them.
+	 *
+	 * Firmware 1.1.15 comes back from a restart with an older stored set, not with what
+	 * was written through the local API — and with local mode on, nothing but this
+	 * adapter can change a setting, so any difference came from the head itself. On
+	 * firmware that keeps its settings nothing ever differs and nothing is written.
+	 *
+	 * @param h the polled head
+	 * @param data its latest reported state
+	 */
+	private async restoreSettings(h: HeadRuntime, data: ReportedState): Promise<void> {
+		if (this.config.restoreSettings === false) {
+			return;
+		}
+		let desired = h.desired;
+		if ('IS' in desired && this.controller && this.config.controllerControlIs) {
+			// The controller recomputes IS every cycle; an old manual value must not fight it.
+			desired = { ...desired };
+			delete desired.IS;
+		}
+		const drift = findDrift(desired, data);
+		const fields = Object.keys(drift);
+		if (!fields.length) {
+			if (h.restoreAttempts > 0) {
+				this.log.info(`Head ${h.index}: settings match again.`);
+			}
+			h.restoreAttempts = 0;
+			return;
+		}
+		const now = Date.now();
+		if (now - h.desiredAt < RESTORE_SETTLE_MS) {
+			return;
+		}
+		const gap = h.restoreAttempts >= RESTORE_WARN_AFTER ? RESTORE_SLOW_RETRY_MS : RESTORE_RETRY_MS;
+		if (h.restoreAttempts > 0 && now - h.restoreLastTry < gap) {
+			return;
+		}
+		h.restoreLastTry = now;
+		h.restoreAttempts++;
+		const detail = fields.map(f => `${f} ${asString(data[f])} → ${drift[f]}`).join(', ');
+		if (h.restoreAttempts === 1) {
+			this.log.info(`Head ${h.index}: restoring settings the head no longer reports (restart?): ${detail}.`);
+		} else if (h.restoreAttempts === RESTORE_WARN_AFTER) {
+			this.log.warn(
+				`Head ${h.index}: the head still reports different settings after ${h.restoreAttempts} attempts ` +
+					`(${detail}) — it may be refusing the value. Retrying every ` +
+					`${RESTORE_SLOW_RETRY_MS / 60000} min; set the value again, or turn off "Restore settings ` +
+					'after a head restart".',
+			);
+		}
+		try {
+			await h.api.write(drift);
+		} catch (e) {
+			this.log.warn(`Head ${h.index}: restoring settings failed: ${errMsg(e)}`);
+		}
 	}
 
 	/**
@@ -1202,6 +1327,10 @@ class Sunenergyxt500 extends utils.Adapter {
 		try {
 			await h.api.write(payload);
 			this.log.info(`Head ${h.index}: wrote ${JSON.stringify(payload)} to device.`);
+			const written = payload[def.field];
+			if (def.restore && typeof written === 'number') {
+				await this.recordDesired(h, def.field, written);
+			}
 			if (def.field !== 'RT') {
 				this.setTimeout(() => void this.readAndApplyHead(h), WRITE_CONFIRM_DELAY_MS);
 			}

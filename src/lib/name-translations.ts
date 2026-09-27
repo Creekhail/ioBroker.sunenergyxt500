@@ -720,6 +720,17 @@ export const NAME_TRANSLATIONS: Record<string, Record<string, string>> = {
 		uk: 'Серійний номер',
 		'zh-cn': '序列号',
 	},
+	'Settings restored after a head restart (JSON)': {
+		ru: 'Настройки, восстанавливаемые после перезапуска блока (JSON)',
+		pt: 'Definições restauradas após reinício da unidade (JSON)',
+		nl: 'Instellingen hersteld na herstart van een unit (JSON)',
+		fr: "Réglages restaurés après un redémarrage de l'unité (JSON)",
+		it: "Impostazioni ripristinate dopo il riavvio dell'unità (JSON)",
+		es: 'Configuración restaurada tras reiniciar la unidad (JSON)',
+		pl: 'Ustawienia przywracane po ponownym uruchomieniu jednostki (JSON)',
+		uk: 'Налаштування, що відновлюються після перезапуску блока (JSON)',
+		'zh-cn': '机组重启后恢复的设置 (JSON)',
+	},
 	'SoC master pack': {
 		ru: 'Мастер-пакет SoC',
 		pt: 'Pacote mestre SoC',

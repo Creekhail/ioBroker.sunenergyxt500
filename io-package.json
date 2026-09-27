@@ -174,6 +174,7 @@
 		"head3Label": "",
 		"pollInterval": 5,
 		"requestTimeout": 8000,
+		"restoreSettings": true,
 		"controlMode": "off",
 		"gridPowerStateId": "",
 		"gridPowerInverted": false,

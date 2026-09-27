@@ -314,7 +314,8 @@ const measurementDefs = [
     unit: "%",
     type: "number",
     name: { en: "Discharge SoC hysteresis", de: "Entlade-SoC-Hysterese" },
-    write: true
+    write: true,
+    restore: true
   },
   {
     id: "battery.SA1",
@@ -328,7 +329,8 @@ const measurementDefs = [
     unit: "%",
     type: "number",
     name: { en: "Charge SoC hysteresis", de: "Lade-SoC-Hysterese" },
-    write: true
+    write: true,
+    restore: true
   },
   // Device / status
   {
@@ -621,7 +623,8 @@ const controlDefs = [
     unit: "W",
     type: "number",
     name: { en: "Inverter output limit", de: "Wechselrichter-Ausgangsgrenze" },
-    write: true
+    write: true,
+    restore: true
   },
   {
     id: "control.SI",
@@ -632,7 +635,8 @@ const controlDefs = [
     unit: "%",
     type: "number",
     name: { en: "Min. discharge SoC (grid mode)", de: "Min. Entlade-SoC (Netzbetrieb)" },
-    write: true
+    write: true,
+    restore: true
   },
   {
     id: "control.SA",
@@ -643,7 +647,8 @@ const controlDefs = [
     unit: "%",
     type: "number",
     name: { en: "Max. charge SoC (grid mode)", de: "Max. Lade-SoC (Netzbetrieb)" },
-    write: true
+    write: true,
+    restore: true
   },
   {
     id: "control.SO",
@@ -654,7 +659,8 @@ const controlDefs = [
     unit: "%",
     type: "number",
     name: { en: "Min. discharge SoC (off-grid mode)", de: "Min. Entlade-SoC (Inselbetrieb)" },
-    write: true
+    write: true,
+    restore: true
   },
   {
     id: "control.MM",
@@ -702,7 +708,8 @@ const controlDefs = [
     unit: "W",
     type: "number",
     name: { en: "Max. grid-tied output power", de: "Max. netzgekoppelte Ausgangsleistung" },
-    write: true
+    write: true,
+    restore: true
   },
   {
     // Warning: LM=1 blocks cloud/app remote control until reset.
@@ -719,7 +726,8 @@ const controlDefs = [
     role: "switch",
     type: "boolean",
     name: { en: "Load priority switch", de: "Lastpriorit\xE4ts-Schalter" },
-    write: true
+    write: true,
+    restore: true
   },
   {
     id: "control.LPS",
@@ -727,7 +735,8 @@ const controlDefs = [
     role: "switch",
     type: "boolean",
     name: { en: "Off-grid output switch", de: "Inselausgang-Schalter" },
-    write: true
+    write: true,
+    restore: true
   },
   {
     id: "control.PM",
@@ -735,7 +744,8 @@ const controlDefs = [
     role: "switch",
     type: "boolean",
     name: { en: "Parallel mode", de: "Parallel-Modus" },
-    write: true
+    write: true,
+    restore: true
   }
 ];
 function applyMeterModeCoupling(field, payload) {

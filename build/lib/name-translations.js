@@ -737,6 +737,17 @@ const NAME_TRANSLATIONS = {
     uk: "\u0421\u0435\u0440\u0456\u0439\u043D\u0438\u0439 \u043D\u043E\u043C\u0435\u0440",
     "zh-cn": "\u5E8F\u5217\u53F7"
   },
+  "Settings restored after a head restart (JSON)": {
+    ru: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438, \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u0430\u0432\u043B\u0438\u0432\u0430\u0435\u043C\u044B\u0435 \u043F\u043E\u0441\u043B\u0435 \u043F\u0435\u0440\u0435\u0437\u0430\u043F\u0443\u0441\u043A\u0430 \u0431\u043B\u043E\u043A\u0430 (JSON)",
+    pt: "Defini\xE7\xF5es restauradas ap\xF3s rein\xEDcio da unidade (JSON)",
+    nl: "Instellingen hersteld na herstart van een unit (JSON)",
+    fr: "R\xE9glages restaur\xE9s apr\xE8s un red\xE9marrage de l'unit\xE9 (JSON)",
+    it: "Impostazioni ripristinate dopo il riavvio dell'unit\xE0 (JSON)",
+    es: "Configuraci\xF3n restaurada tras reiniciar la unidad (JSON)",
+    pl: "Ustawienia przywracane po ponownym uruchomieniu jednostki (JSON)",
+    uk: "\u041D\u0430\u043B\u0430\u0448\u0442\u0443\u0432\u0430\u043D\u043D\u044F, \u0449\u043E \u0432\u0456\u0434\u043D\u043E\u0432\u043B\u044E\u044E\u0442\u044C\u0441\u044F \u043F\u0456\u0441\u043B\u044F \u043F\u0435\u0440\u0435\u0437\u0430\u043F\u0443\u0441\u043A\u0443 \u0431\u043B\u043E\u043A\u0430 (JSON)",
+    "zh-cn": "\u673A\u7EC4\u91CD\u542F\u540E\u6062\u590D\u7684\u8BBE\u7F6E (JSON)"
+  },
   "SoC master pack": {
     ru: "\u041C\u0430\u0441\u0442\u0435\u0440-\u043F\u0430\u043A\u0435\u0442 SoC",
     pt: "Pacote mestre SoC",

@@ -1344,3 +1344,148 @@ describe('adapter lifecycle: binding and limit ownership', function () {
 		expect(head1.writes, 'no mode write may follow the shutdown').to.deep.equal([]);
 	});
 });
+
+describe('adapter lifecycle: settings restore', function () {
+	this.timeout(30000);
+	let head1: FakeHead;
+
+	beforeEach(async () => {
+		head1 = await startHead();
+	});
+
+	afterEach(async () => {
+		await head1.close();
+	});
+
+	function monitorOnly(extra: Record<string, unknown> = {}, preset: Record<string, unknown> = {}): Harness {
+		return createHarness(
+			{
+				head1Host: `127.0.0.1:${head1.port}`,
+				controlMode: 'off',
+				pollInterval: 3600,
+				requestTimeout: 2000,
+				...extra,
+			},
+			preset,
+		);
+	}
+
+	/**
+	 * Moves the head's bookkeeping past the settle window and the retry gap.
+	 *
+	 * @param h the harness whose first head is aged
+	 * @param ms how far to move both timestamps into the past
+	 */
+	function ageRestore(h: Harness, ms: number): void {
+		const rt = h.instance.heads[0];
+		rt.desiredAt -= ms;
+		rt.restoreLastTry -= ms;
+	}
+
+	it('puts a setting back that the head lost on a restart', async () => {
+		// Firmware 1.1.15: SI set through the local API came back as the older 5 after a
+		// restart, and with local mode on nothing else could set it again.
+		const h = monitorOnly();
+		await h.ready();
+		await h.poll(1);
+		await h.write('heads.1.control.SI', 10);
+		expect(h.states['heads.1.info.desiredSettings']?.val).to.equal('{"SI":10}');
+		await h.poll(1);
+		head1.writes.length = 0;
+		head1.reported.SI = 5; // the restart
+		ageRestore(h, 20000);
+		await h.poll(1);
+		expect(head1.writes).to.deep.equal([{ SI: 10 }]);
+		expect(h.logs.some(l => l.level === 'info' && l.message.includes('restoring settings'))).to.equal(true);
+	});
+
+	it('remembers the settings across an adapter restart', async () => {
+		// The head and the adapter can restart independently, e.g. after a power cut.
+		head1.reported.SI = 5;
+		const h = monitorOnly({}, { 'heads.1.info.desiredSettings': '{"SI":10}' });
+		await h.ready();
+		head1.writes.length = 0;
+		await h.poll(1);
+		expect(head1.writes).to.deep.equal([{ SI: 10 }]);
+	});
+
+	it('writes nothing for a setting nobody set through the adapter', async () => {
+		// Adopting the head's current values as the record on first start would make a
+		// restart-reset value permanent if the adapter happened to start right after one.
+		head1.reported.SI = 5;
+		const h = monitorOnly();
+		await h.ready();
+		head1.writes.length = 0;
+		await h.poll(1);
+		await h.poll(1);
+		expect(head1.writes).to.deep.equal([]);
+	});
+
+	it('leaves the head alone when the option is off', async () => {
+		head1.reported.SI = 5;
+		const h = monitorOnly({ restoreSettings: false }, { 'heads.1.info.desiredSettings': '{"SI":10}' });
+		await h.ready();
+		head1.writes.length = 0;
+		await h.poll(1);
+		expect(head1.writes).to.deep.equal([]);
+	});
+
+	it('does not compare right after the operator set a value', async () => {
+		// The head applies a write asynchronously; a poll in between still carries the old
+		// value, and treating that as a lost setting would log a restart that never was.
+		const h = monitorOnly();
+		await h.ready();
+		await h.poll(1);
+		// The fake head echoes a write right after onWrite; deferring the reset keeps the
+		// old value in place for the next poll, as if the head had not applied it yet.
+		head1.onWrite = () => setImmediate(() => (head1.reported.SI = 5));
+		await h.write('heads.1.control.SI', 10);
+		head1.writes.length = 0;
+		await h.poll(1);
+		expect(head1.writes).to.deep.equal([]);
+	});
+
+	it('backs off and warns when the head keeps refusing a value', async () => {
+		const h = monitorOnly({}, { 'heads.1.info.desiredSettings': '{"SI":10}' });
+		// Accepted over HTTP, never applied: deferred past the fake head's own echo.
+		head1.onWrite = () => setImmediate(() => (head1.reported.SI = 5));
+		head1.reported.SI = 5;
+		await h.ready();
+		head1.writes.length = 0;
+		await h.poll(1);
+		expect(head1.writes.length, 'first attempt at once').to.equal(1);
+		await h.poll(1);
+		expect(head1.writes.length, 'not again on the next poll').to.equal(1);
+		ageRestore(h, 61000);
+		await h.poll(1);
+		ageRestore(h, 61000);
+		await h.poll(1);
+		expect(head1.writes.length).to.equal(3);
+		expect(h.logs.some(l => l.level === 'warn' && l.message.includes('still reports different settings'))).to.equal(
+			true,
+		);
+		ageRestore(h, 61000);
+		await h.poll(1);
+		expect(head1.writes.length, 'then only on the slow retry gap').to.equal(3);
+	});
+
+	it('does not restore a manual IS while the controller steers it', async () => {
+		const h = createHarness(
+			{
+				head1Host: `127.0.0.1:${head1.port}`,
+				controlMode: 'controller',
+				gridPowerStateId: 'shelly.0.total',
+				controllerControlIs: true,
+				pollInterval: 3600,
+				requestTimeout: 2000,
+			},
+			{ 'heads.1.info.desiredSettings': '{"IS":1500}' },
+		);
+		head1.reported.IS = 300;
+		await h.ready();
+		head1.writes.length = 0;
+		await h.poll(1);
+		expect(head1.writes.some(w => w.IS === 1500)).to.equal(false);
+		await h.unload();
+	});
+});
