@@ -352,6 +352,83 @@ describe('admin config validators', () => {
 	});
 });
 
+describe('admin UI texts', () => {
+	const ROOT = path.join(__dirname, '..');
+	const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'admin', 'jsonConfig.json'), 'utf8')) as unknown;
+
+	/** Every config item that carries text, keyed by its attribute name. */
+	function items(): { key: string; item: Record<string, unknown> }[] {
+		const out: { key: string; item: Record<string, unknown> }[] = [];
+		const walk = (node: unknown, key: string): void => {
+			if (!node || typeof node !== 'object') {
+				return;
+			}
+			const rec = node as Record<string, unknown>;
+			if (typeof rec.type === 'string') {
+				out.push({ key, item: rec });
+			}
+			for (const [k, v] of Object.entries(rec)) {
+				walk(v, k);
+			}
+		};
+		walk(cfg, '');
+		return out;
+	}
+
+	it('keeps the visible help to one short line', () => {
+		// The owner asked for this: long explanations made the settings page hard to scan.
+		// The detail belongs in the tooltip and the README section it links to.
+		for (const { key, item } of items()) {
+			if (typeof item.help === 'string') {
+				expect(item.help.length, `${key}: "${item.help}"`).to.be.at.most(100);
+			}
+		}
+	});
+
+	it('links every tooltip to a README section that exists', () => {
+		// A tooltip cannot be reached on a phone or tablet; the link is the way there. A
+		// renamed heading would leave it pointing at the top of the page without notice.
+		const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+		const anchors = new Set(
+			[...readme.matchAll(/^#{1,6} (.+)$/gm)].map(m =>
+				m[1]
+					.trim()
+					.toLowerCase()
+					.replace(/[^\p{L}\p{N} -]/gu, '')
+					.replace(/ /g, '-'),
+			),
+		);
+		for (const { key, item } of items()) {
+			if (item.tooltip === undefined) {
+				continue;
+			}
+			expect(item.helpLink, `${key} has a tooltip but no helpLink`).to.be.a('string');
+			const anchor = String(item.helpLink).split('#')[1];
+			expect(anchors.has(anchor), `${key}: README has no section #${anchor}`).to.equal(true);
+		}
+	});
+
+	it('has every text in every language', () => {
+		const dir = path.join(ROOT, 'admin', 'i18n');
+		const texts = new Set<string>();
+		for (const { item } of items()) {
+			for (const attr of ['label', 'help', 'tooltip', 'text']) {
+				if (typeof item[attr] === 'string') {
+					texts.add(item[attr]);
+				}
+			}
+		}
+		for (const file of fs.readdirSync(dir)) {
+			const dict = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8')) as Record<string, string>;
+			for (const text of texts) {
+				expect(dict[text], `${file}: missing "${text.slice(0, 60)}"`)
+					.to.be.a('string')
+					.and.not.equal('');
+			}
+		}
+	});
+});
+
 describe('Tasmota subtype list', () => {
 	/**
 	 * The admin dropdown's option values, in the order the UI offers them.

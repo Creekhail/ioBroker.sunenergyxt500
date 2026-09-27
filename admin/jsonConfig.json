@@ -19,7 +19,7 @@
 				},
 				"headsInfo": {
 					"type": "staticText",
-					"text": "Configure up to three SunEnergyXT heads managed by this instance. Head 1 is required; heads 2 and 3 are optional (leave the host empty if unused). Each must be reachable via its local HTTP API (local mode LM=1). For multiple heads put them on different phases — this is the operator's responsibility; the adapter regulates the net (summed) grid power.",
+					"text": "Up to three heads; head 1 is required. Each needs local mode (LM=1). Put multiple heads on different phases.",
 					"newLine": true,
 					"xs": 12,
 					"sm": 12,
@@ -108,7 +108,7 @@
 				"pollInterval": {
 					"type": "number",
 					"label": "Poll interval (s)",
-					"help": "One /read per head and interval; the heads are polled staggered. With two or more heads or a weak Wi-Fi signal (heads.<n>.device.network.WR below -75 dB) use 10-15 s — the controller reacts to the grid-power source, not to this poll, so control quality barely suffers.",
+					"help": "How often each head is read. With several heads or weak Wi-Fi use 10–15 s.",
 					"min": 1,
 					"max": 3600,
 					"default": 5,
@@ -117,7 +117,9 @@
 					"sm": 6,
 					"md": 3,
 					"lg": 2,
-					"xl": 2
+					"xl": 2,
+					"tooltip": "One /read per head and interval; the heads are polled staggered. With two or more heads or a weak Wi-Fi signal (heads.<n>.device.network.WR below -75 dB) use 10-15 s — the controller reacts to the grid-power source, not to this poll, so control quality barely suffers.",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#configuration"
 				},
 				"requestTimeout": {
 					"type": "number",
@@ -135,13 +137,15 @@
 					"type": "checkbox",
 					"label": "Restore settings after a head restart",
 					"default": true,
-					"help": "Some firmware (1.1.5) does not keep values written through the local API: after a restart the head comes back with older settings. With this on, the adapter remembers what you set through it (SoC limits, inverter and grid output limits, switches) and writes it again whenever the head reports something else. Only values set after this option exists are remembered — set them once through the adapter. Turn it off if another tool manages these settings.",
+					"help": "Writes settings made through the adapter again when the head loses them.",
 					"newLine": true,
 					"xs": 12,
 					"sm": 12,
 					"md": 6,
 					"lg": 4,
-					"xl": 4
+					"xl": 4,
+					"tooltip": "Some firmware (1.1.5) does not keep values written through the local API: after a restart the head comes back with older settings. With this on, the adapter remembers what you set through it (SoC limits, inverter and grid output limits, switches) and writes it again whenever the head reports something else. Only values set after this option exists are remembered — set them once through the adapter. Turn it off if another tool manages these settings.",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#settings-after-a-head-restart"
 				}
 			}
 		},
@@ -182,7 +186,7 @@
 				},
 				"controlInfoController": {
 					"type": "staticText",
-					"text": "•  Adapter controller — ioBroker writes the grid setpoint (GS) from any meter state and splits it across all heads; works with ANY meter and with 1–3 heads.",
+					"text": "•  Adapter controller — the adapter writes GS from any meter state; 1–3 heads.",
 					"newLine": true,
 					"xs": 12,
 					"sm": 12,
@@ -202,7 +206,7 @@
 				},
 				"controlInfoNote": {
 					"type": "staticText",
-					"text": "The control modes are mutually exclusive; the adapter enforces the matching device mode (MM) on every head and warns if it is changed externally. Requires local mode (LM=1) on each device.",
+					"text": "Only one mode at a time; the adapter keeps the device mode (MM) in line. Requires local mode (LM=1).",
 					"newLine": true,
 					"xs": 12,
 					"sm": 12,
@@ -241,7 +245,7 @@
 				},
 				"deviceMultiNote": {
 					"type": "staticText",
-					"text": "⚠  Device self-regulation works with a single head only. With more than one head configured this mode is ignored (the adapter stays in monitoring/off). Use the adapter controller for multiple heads.",
+					"text": "⚠  Device self-regulation works with one head only; with more heads use the adapter controller.",
 					"hidden": "!(data.controlMode === 'device' && (data.head2Host || data.head3Host))",
 					"newLine": true,
 					"xs": 12,
@@ -252,7 +256,7 @@
 				},
 				"controllerInfo": {
 					"type": "staticText",
-					"text": "The controller computes one total setpoint from your grid-power meter (feed-forward + P) and splits it equally across the online heads, capped per head with overflow; a full head (charging) or empty head (discharging) drops out. The adapter forces MM=0 on every head so the devices execute GS.",
+					"text": "One total setpoint from your meter, split across the online heads. The adapter sets MM=0 so the heads follow GS.",
 					"hidden": "data.controlMode !== 'controller'",
 					"newLine": true,
 					"xs": 12,
@@ -264,7 +268,7 @@
 				"gridPowerStateId": {
 					"type": "objectId",
 					"label": "Grid-power source state",
-					"help": "Foreign state holding the grid power of your house meter (e.g. a Shelly Pro 3EM total). Convention: >0 = grid draw, <0 = feed-in.",
+					"help": "State with your house meter's grid power (>0 = draw, <0 = feed-in).",
 					"validator": "data.controlMode !== 'controller' || (!!data.gridPowerStateId && data.gridPowerStateId.trim().indexOf('sunenergyxt500.') !== 0)",
 					"validatorErrorText": "Controller mode needs a grid-power source, and it cannot be one of this adapter’s own states — that would feed the controller its own output.",
 					"validatorNoSaveOnError": true,
@@ -274,7 +278,9 @@
 					"sm": 12,
 					"md": 8,
 					"lg": 6,
-					"xl": 6
+					"xl": 6,
+					"tooltip": "Foreign state holding the grid power of your house meter (e.g. a Shelly Pro 3EM total). Convention: >0 = grid draw, <0 = feed-in.",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#configuration"
 				},
 				"gridPowerInverted": {
 					"type": "checkbox",
@@ -291,14 +297,16 @@
 					"type": "checkbox",
 					"label": "Adaptive control",
 					"default": true,
-					"help": "Regulates in three manufacturer-proven tiers: small deviations gently (every 7 s, 20 W steps), medium ones every 2.5 s (120 W), large load steps immediately (450 W); fixed 5 W dead band. Disable to tune gain, dead band, interval and step limit manually.",
+					"help": "Proven three-tier control. Turn off to tune the fields below manually.",
 					"hidden": "data.controlMode !== 'controller'",
 					"newLine": true,
 					"xs": 12,
 					"sm": 12,
 					"md": 6,
 					"lg": 4,
-					"xl": 4
+					"xl": 4,
+					"tooltip": "Regulates in three manufacturer-proven tiers: small deviations gently (every 7 s, 20 W steps), medium ones every 2.5 s (120 W), large load steps immediately (450 W); fixed 5 W dead band. Disable to tune gain, dead band, interval and step limit manually.",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#control-behaviour-accuracy-and-limits"
 				},
 				"controllerTargetW": {
 					"type": "number",
@@ -307,14 +315,16 @@
 					"max": 200,
 					"step": 1,
 					"default": 0,
-					"help": "0 = zero feed-in. Positive values keep a small deliberate grid draw (never feed in), negative values keep a small deliberate feed-in. Same sign convention as the source state (>0 = draw).",
+					"help": "0 = zero feed-in; >0 keeps a small draw, <0 a small feed-in.",
 					"hidden": "data.controlMode !== 'controller'",
 					"newLine": true,
 					"xs": 12,
 					"sm": 6,
 					"md": 3,
 					"lg": 2,
-					"xl": 2
+					"xl": 2,
+					"tooltip": "0 = zero feed-in. Positive values keep a small deliberate grid draw (never feed in), negative values keep a small deliberate feed-in. Same sign convention as the source state (>0 = draw).",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#control-behaviour-accuracy-and-limits"
 				},
 				"controllerMaxStepW": {
 					"type": "number",
@@ -323,13 +333,15 @@
 					"max": 2400,
 					"step": 10,
 					"default": 500,
-					"help": "Limits how far the setpoint moves per control step — allows a high gain without overshoot on meter spikes. 0 = unlimited.",
+					"help": "Largest setpoint change per step (0 = unlimited).",
 					"hidden": "data.controlMode !== 'controller' || data.controllerAdaptive",
 					"xs": 12,
 					"sm": 6,
 					"md": 3,
 					"lg": 2,
-					"xl": 2
+					"xl": 2,
+					"tooltip": "Limits how far the setpoint moves per control step — allows a high gain without overshoot on meter spikes. 0 = unlimited.",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#control-behaviour-accuracy-and-limits"
 				},
 				"controllerGain": {
 					"type": "number",
@@ -338,13 +350,15 @@
 					"max": 2,
 					"step": 0.05,
 					"default": 0.3,
-					"help": "Fraction of the grid deviation corrected per step: 0.3 = smooth (several steps), 1.0 = full correction in one step. Values above 1 can overshoot.",
+					"help": "Share of the deviation corrected per step (0.3 smooth, 1.0 in one step).",
 					"hidden": "data.controlMode !== 'controller' || data.controllerAdaptive",
 					"xs": 12,
 					"sm": 6,
 					"md": 3,
 					"lg": 2,
-					"xl": 2
+					"xl": 2,
+					"tooltip": "Fraction of the grid deviation corrected per step: 0.3 = smooth (several steps), 1.0 = full correction in one step. Values above 1 can overshoot.",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#control-behaviour-accuracy-and-limits"
 				},
 				"controllerDeadBandW": {
 					"type": "number",
@@ -352,13 +366,15 @@
 					"min": 0,
 					"max": 500,
 					"default": 20,
-					"help": "Grid deviations below this are not corrected. 0 = correct everything; larger values keep the controller quiet but leave a small permanent deviation.",
+					"help": "Deviations below this are left alone (0 = correct everything).",
 					"hidden": "data.controlMode !== 'controller' || data.controllerAdaptive",
 					"xs": 12,
 					"sm": 6,
 					"md": 3,
 					"lg": 2,
-					"xl": 2
+					"xl": 2,
+					"tooltip": "Grid deviations below this are not corrected. 0 = correct everything; larger values keep the controller quiet but leave a small permanent deviation.",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#control-behaviour-accuracy-and-limits"
 				},
 				"controllerMinIntervalMs": {
 					"type": "number",
@@ -366,13 +382,15 @@
 					"min": 1000,
 					"max": 60000,
 					"default": 5000,
-					"help": "Minimum time between two corrections. Lower values settle faster but write to the devices more often (floor: 1000 ms).",
+					"help": "Minimum time between two corrections (at least 1000 ms).",
 					"hidden": "data.controlMode !== 'controller' || data.controllerAdaptive",
 					"xs": 12,
 					"sm": 6,
 					"md": 3,
 					"lg": 2,
-					"xl": 2
+					"xl": 2,
+					"tooltip": "Minimum time between two corrections. Lower values settle faster but write to the devices more often (floor: 1000 ms).",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#control-behaviour-accuracy-and-limits"
 				},
 				"controllerWriteDeadBandW": {
 					"type": "number",
@@ -380,13 +398,15 @@
 					"min": 0,
 					"max": 500,
 					"default": 10,
-					"help": "Minimum change of a head's setpoint before it is re-written (anti-chatter). Keep it small — too high relative to the gain leaves small grid deviations uncorrected (effective grid dead zone ≈ this ÷ gain).",
+					"help": "Smallest setpoint change per head that is written. Keep it small.",
 					"hidden": "data.controlMode !== 'controller'",
 					"xs": 12,
 					"sm": 6,
 					"md": 3,
 					"lg": 2,
-					"xl": 2
+					"xl": 2,
+					"tooltip": "Minimum change of a head's setpoint before it is re-written (anti-chatter). Keep it small — too high relative to the gain leaves small grid deviations uncorrected (effective grid dead zone ≈ this ÷ gain).",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#control-behaviour-accuracy-and-limits"
 				},
 				"controllerMeterStabilizationMs": {
 					"type": "number",
@@ -394,26 +414,30 @@
 					"min": 0,
 					"max": 30000,
 					"default": 0,
-					"help": "Readings taken before the last setpoint write are always discarded — they still describe the state before it. Keep 0 for meters whose value follows the physical change immediately. Raise it slightly above the measured content delay for meters that publish fresh timestamps while the value still lags; too low allows hunting, too high slows the response to real load changes.",
+					"help": "Extra wait for meters whose value lags behind its timestamp. Usually 0.",
 					"hidden": "data.controlMode !== 'controller'",
 					"xs": 12,
 					"sm": 6,
 					"md": 3,
 					"lg": 2,
-					"xl": 2
+					"xl": 2,
+					"tooltip": "Readings taken before the last setpoint write are always discarded — they still describe the state before it. Keep 0 for meters whose value follows the physical change immediately. Raise it slightly above the measured content delay for meters that publish fresh timestamps while the value still lags; too low allows hunting, too high slows the response to real load changes.",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#configuration"
 				},
 				"controllerControlIs": {
 					"type": "checkbox",
 					"label": "Also steer the inverter limit (IS)",
 					"default": false,
-					"help": "In addition to the grid setpoint, the controller sets the maximum inverter output: the discharge part of GS plus whatever the load port draws, capped to the PV power once the head has reached its discharge floor. Leave this off unless a load is wired to the load port — without one it only adds writes. While it is on, manual writes to the inverter limit are ignored, and a limit you set yourself beforehand is not restored: on failsafe and shutdown the limit is handed back to the head's maximum (best effort, within the shutdown budget). Use \"Max. grid output\" (MG) for a permanent limit.",
+					"help": "Also sets the inverter limit. Only useful with a load on the load port.",
 					"hidden": "data.controlMode !== 'controller'",
 					"newLine": true,
 					"xs": 12,
 					"sm": 6,
 					"md": 3,
 					"lg": 2,
-					"xl": 2
+					"xl": 2,
+					"tooltip": "In addition to the grid setpoint, the controller sets the maximum inverter output: the discharge part of GS plus whatever the load port draws, capped to the PV power once the head has reached its discharge floor. Leave this off unless a load is wired to the load port — without one it only adds writes. While it is on, manual writes to the inverter limit are ignored, and a limit you set yourself beforehand is not restored: on failsafe and shutdown the limit is handed back to the head's maximum (best effort, within the shutdown budget). Use \"Max. grid output\" (MG) for a permanent limit.",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#configuration"
 				},
 				"controllerIsWriteDeadBandW": {
 					"type": "number",
@@ -472,7 +496,7 @@
 				},
 				"meterInfo": {
 					"type": "staticText",
-					"text": "The adapter binds this meter into the (single) storage (MM=1 + MD) and lets the device regulate itself; it does not write GS. Only the four meter types below are supported, and the meter must be reachable by the storage on the local network. Note: the meter stays usable in ioBroker (it is only polled over HTTP).",
+					"text": "The storage reads this meter itself (MM=1 + MD) and regulates on its own; the meter stays usable in ioBroker.",
 					"hidden": "data.controlMode !== 'device'",
 					"newLine": true,
 					"xs": 12,
@@ -514,18 +538,20 @@
 				"meterId": {
 					"type": "text",
 					"label": "Meter SN / IP",
-					"help": "Meter serial number for Shelly/Tasmota (mDNS); the LAN IP for EcoTracker (direct). For Tasmota use the SN prefix without the last 4 characters.",
+					"help": "Shelly/Tasmota: serial number; EcoTracker: LAN IP.",
 					"hidden": "data.controlMode !== 'device'",
 					"xs": 12,
 					"sm": 12,
 					"md": 6,
 					"lg": 4,
-					"xl": 4
+					"xl": 4,
+					"tooltip": "Meter serial number for Shelly/Tasmota (mDNS); the LAN IP for EcoTracker (direct). For Tasmota use the SN prefix without the last 4 characters.",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#configuration"
 				},
 				"meterTasmotaSubtype": {
 					"type": "select",
 					"label": "Tasmota meter subtype",
-					"help": "Your Tasmota / BitShake energy-monitor subtype (from the device API reference, section 5.4). The adapter derives the correct power key (dat_str.pwr) from it.",
+					"help": "Subtype of your Tasmota / BitShake meter (API reference, section 5.4).",
 					"hidden": "data.controlMode !== 'device' || data.meterType !== 'tasmota'",
 					"newLine": true,
 					"xs": 12,
@@ -762,7 +788,9 @@
 							"label": "SML",
 							"value": "SML"
 						}
-					]
+					],
+					"tooltip": "Your Tasmota / BitShake energy-monitor subtype (from the device API reference, section 5.4). The adapter derives the correct power key (dat_str.pwr) from it.",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#configuration"
 				}
 			}
 		}
