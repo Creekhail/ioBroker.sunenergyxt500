@@ -208,7 +208,7 @@ The raw fields stay writable for expert/manual use (e.g. in *Off* mode). They fo
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 0.3.4 (2026-09-28)
 * (Creekhail) **New: a discharge floor kept by the controller itself.** Firmware 1.1.5 can lock up at the moment a head cuts off discharging at its own floor (`SI`): the status LED turns red, the grid LED blinks, and the head refuses to charge — even from its own PV inputs — until it is disconnected from the grid; a restart over the API does not reliably clear it. The problem occurs with floors of 5, 10 and 30 % and without this adapter as well. With the new option the controller stops asking a head to discharge once its emptiest pack reaches the set value, above the head's own floor, so the head never reaches the point where it locks up. Measured on the emptiest pack because the packs of a head drift apart. Off by default; controller mode only.
 * (Creekhail) **Shorter help texts in the instance settings.** Each field now shows one short line; the full explanation appears when you hover over the field, and a link under it opens the matching section of this README, so the details are reachable on a phone or tablet as well. The introductions above the sections are shortened too.
 
