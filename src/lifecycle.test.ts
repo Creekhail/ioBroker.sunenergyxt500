@@ -1489,3 +1489,75 @@ describe('adapter lifecycle: settings restore', function () {
 		await h.unload();
 	});
 });
+
+describe('adapter lifecycle: controller discharge floor', function () {
+	this.timeout(30000);
+	let head1: FakeHead;
+
+	beforeEach(async () => {
+		head1 = await startHead();
+	});
+
+	afterEach(async () => {
+		await head1.close();
+	});
+
+	/**
+	 * Runs one regulation cycle on a house that is drawing power and reports whether the
+	 * controller asked the head to discharge.
+	 *
+	 * @param config extra instance configuration
+	 * @param reported the head's snapshot
+	 */
+	async function discharges(config: Record<string, unknown>, reported: Record<string, unknown>): Promise<boolean> {
+		Object.assign(head1.reported, reported);
+		const h = createHarness({
+			head1Host: `127.0.0.1:${head1.port}`,
+			controlMode: 'controller',
+			gridPowerStateId: 'shelly.0.total',
+			pollInterval: 3600,
+			requestTimeout: 2000,
+			...config,
+		});
+		await h.ready();
+		await h.poll(1);
+		head1.writes.length = 0;
+		// A sample stamped in the same millisecond as the startup write counts as taken
+		// before it and is discarded; on a fast local round trip that happens now and then.
+		await new Promise(r => setTimeout(r, 20));
+		await h.feedGrid(1200); // the house draws 1.2 kW
+		const asked = head1.writes.some(w => typeof w.GS === 'number' && w.GS > 0);
+		await h.unload();
+		return asked;
+	}
+
+	it('stops discharging at its own floor while the head would still go lower', async () => {
+		// Firmware 1.1.15 locks up at the head's own cut-off; the controller stops above it.
+		// 14 % is clear of the head's own floor and its SI1 band (5…10 %), so only the
+		// controller's floor of 15 % can explain the refusal.
+		const pack = { SI: 5, SI1: 5, ON: 2, SC: 14, SC0: 14, SC1: 14 };
+		expect(await discharges({ controllerMinSoc: 15 }, pack)).to.equal(false);
+	});
+
+	it('discharges normally above its floor', async () => {
+		const pack = { SI: 5, SI1: 5, ON: 2, SC: 30, SC0: 30, SC1: 30 };
+		expect(await discharges({ controllerMinSoc: 10 }, pack)).to.equal(true);
+	});
+
+	it('measures its floor on the emptiest pack, not on the average', async () => {
+		// The packs drift apart: an average of 20 % can hide a pack that is already at 10.
+		const pack = { SI: 5, SI1: 5, ON: 2, SC: 20, SC0: 30, SC1: 10 };
+		expect(await discharges({ controllerMinSoc: 10 }, pack)).to.equal(false);
+	});
+
+	it('ignores pack slots beyond the connected ones', async () => {
+		// A slot without a pack may read 0; counting it would block discharging for good.
+		const pack = { SI: 5, SI1: 5, ON: 2, SC: 30, SC0: 30, SC1: 30, SC2: 0 };
+		expect(await discharges({ controllerMinSoc: 10 }, pack)).to.equal(true);
+	});
+
+	it('leaves the behaviour unchanged when the option is off', async () => {
+		const pack = { SI: 5, SI1: 5, ON: 2, SC: 20, SC0: 30, SC1: 10 };
+		expect(await discharges({ controllerMinSoc: 0 }, pack)).to.equal(true);
+	});
+});

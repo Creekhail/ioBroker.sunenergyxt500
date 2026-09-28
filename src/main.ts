@@ -28,7 +28,7 @@ import {
 	roundTo,
 	subscribedControlPatterns,
 } from './lib/states';
-import { asString, errMsg, fallbackMaxPower, hostKey, num } from './lib/values';
+import { asString, emptiestPack, errMsg, fallbackMaxPower, hostKey, num } from './lib/values';
 import { type DesiredSettings, findDrift, parseDesired } from './lib/restore';
 
 /** Delay before re-reading the device to confirm a control write. */
@@ -196,6 +196,8 @@ interface HeadRuntime {
 	lp?: number;
 	/** Total PV power in W. */
 	pv?: number;
+	/** Charge of the emptiest connected pack (SC0…), which can sit well below the average SC. */
+	packSocMin?: number;
 	/** Discharge-side SoC hysteresis band in percent, from SI1. */
 	socHysteresisDischarge?: number;
 	/** Charge-side SoC hysteresis band in percent, from SA1. */
@@ -226,6 +228,14 @@ interface HeadRuntime {
 class Sunenergyxt500 extends utils.Adapter {
 	private heads: HeadRuntime[] = [];
 	private pollIntervalMs = 5000;
+	/**
+	 * Discharge floor the controller keeps on its own, in percent; 0 = only the head's SI.
+	 *
+	 * Firmware 1.1.15 can lock up at the moment a head cuts off discharging at its own
+	 * floor, and only a disconnect from the grid clears it. Stopping the discharge above
+	 * that floor means the head never gets there.
+	 */
+	private controllerMinSoc = 0;
 	/** Active control mode: off (monitoring), controller (Mode B) or device (Mode A, single head). */
 	private controlMode: 'off' | 'controller' | 'device' = 'off';
 	/**
@@ -777,6 +787,7 @@ class Sunenergyxt500 extends utils.Adapter {
 			await this.setStateChangedAsync(`${base}.info.rawResponse`, body, true);
 
 			h.soc = num(data.SC);
+			h.packSocMin = emptiestPack(data);
 			h.bp = num(data.BP);
 			h.gp = num(data.GP);
 			h.lp = num(data.LP);
@@ -1596,6 +1607,12 @@ class Sunenergyxt500 extends utils.Adapter {
 			);
 			return;
 		}
+		this.controllerMinSoc = Math.max(0, Math.min(100, cfgNum(this.config.controllerMinSoc, 0)));
+		if (this.controllerMinSoc > 0) {
+			this.log.info(
+				`Controller discharge floor: ${this.controllerMinSoc} % (a head's own SI applies where it is higher).`,
+			);
+		}
 		// cfgNum keeps explicit zeros (gain/dead bands of 0 must not become defaults).
 		const cfg: ControllerConfig = {
 			// Adaptive tiers by default; missing key (pre-0.2.7 installs) means adaptive.
@@ -1656,6 +1673,27 @@ class Sunenergyxt500 extends utils.Adapter {
 	}
 
 	/** Maps the current head runtime to the pure HeadState used by the controller and split. */
+	/**
+	 * The discharge floor the controller works with, in terms of the head's average SoC.
+	 *
+	 * The head's own floor (SI) applies to its average. The controller's floor applies to
+	 * the emptiest pack instead: the packs drift apart, and the average can still read 10 %
+	 * while one pack is already at the head's own cut-off — the point this floor exists to
+	 * keep away from. Shifting the floor by the spread expresses that in the average the
+	 * rest of the loop uses: `soc <= floor + (soc - emptiest)` holds exactly when the
+	 * emptiest pack has reached the floor, and the SI1 band before release shifts with it.
+	 *
+	 * @param h the head
+	 */
+	private effectiveSocMin(h: HeadRuntime): number {
+		const own = h.socMin ?? 0;
+		if (this.controllerMinSoc <= 0 || h.soc === undefined) {
+			return own;
+		}
+		const spread = h.packSocMin === undefined ? 0 : Math.max(0, h.soc - h.packSocMin);
+		return Math.max(own, this.controllerMinSoc + spread);
+	}
+
 	private headStates(): HeadState[] {
 		return this.heads.map(h => ({
 			index: h.index,
@@ -1668,7 +1706,10 @@ class Sunenergyxt500 extends utils.Adapter {
 			// included: substituting 0 would invent a floor the device never agreed to.
 			controllable: h.soc !== undefined && h.socMax !== undefined && h.socMin !== undefined,
 			soc: h.soc ?? 0,
-			socMin: h.socMin ?? 0,
+			// The higher of the two floors: the head's own, and the one the controller keeps so
+			// the head never reaches its own cut-off. Everything that acts at the floor — leaving
+			// the discharge split, the SI1 band before release, the IS cap — follows from this.
+			socMin: this.effectiveSocMin(h),
 			socMax: h.socMax ?? 100,
 			maxPower: h.maxPower,
 			// MG caps the output only. Drawing is documented as -2400..0 for both models,

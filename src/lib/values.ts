@@ -91,3 +91,27 @@ export function hostKey(host: string): string {
 		.replace(/^https?:\/\//, '')
 		.replace(/\/+$/, '');
 }
+
+/**
+ * Charge of the emptiest connected battery pack, from SC0…SC5.
+ *
+ * Only the first `ON` packs count: a slot without a pack may be reported as 0, and
+ * taking that as a real charge would block discharging for good.
+ *
+ * @param data the head's reported state
+ * @returns the lowest pack charge in percent, or undefined if none is reported
+ */
+export function emptiestPack(data: Record<string, unknown>): number | undefined {
+	const count = num(data.ON);
+	let min: number | undefined;
+	for (let i = 0; i < 6; i++) {
+		if (count !== undefined && i >= count) {
+			break;
+		}
+		const v = num(data[`SC${i}`]);
+		if (v !== undefined && (min === undefined || v < min)) {
+			min = v;
+		}
+	}
+	return min;
+}

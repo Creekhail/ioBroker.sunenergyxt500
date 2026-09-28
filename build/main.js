@@ -92,6 +92,14 @@ const AGGREGATE_DEFS = [
 class Sunenergyxt500 extends utils.Adapter {
   heads = [];
   pollIntervalMs = 5e3;
+  /**
+   * Discharge floor the controller keeps on its own, in percent; 0 = only the head's SI.
+   *
+   * Firmware 1.1.15 can lock up at the moment a head cuts off discharging at its own
+   * floor, and only a disconnect from the grid clears it. Stopping the discharge above
+   * that floor means the head never gets there.
+   */
+  controllerMinSoc = 0;
   /** Active control mode: off (monitoring), controller (Mode B) or device (Mode A, single head). */
   controlMode = "off";
   /**
@@ -573,6 +581,7 @@ class Sunenergyxt500 extends utils.Adapter {
       await this.restoreSettings(h, data);
       await this.setStateChangedAsync(`${base}.info.rawResponse`, body, true);
       h.soc = (0, import_values.num)(data.SC);
+      h.packSocMin = (0, import_values.emptiestPack)(data);
       h.bp = (0, import_values.num)(data.BP);
       h.gp = (0, import_values.num)(data.GP);
       h.lp = (0, import_values.num)(data.LP);
@@ -1268,6 +1277,12 @@ class Sunenergyxt500 extends utils.Adapter {
       );
       return;
     }
+    this.controllerMinSoc = Math.max(0, Math.min(100, (0, import_states.cfgNum)(this.config.controllerMinSoc, 0)));
+    if (this.controllerMinSoc > 0) {
+      this.log.info(
+        `Controller discharge floor: ${this.controllerMinSoc} % (a head's own SI applies where it is higher).`
+      );
+    }
     const cfg = {
       // Adaptive tiers by default; missing key (pre-0.2.7 installs) means adaptive.
       adaptive: this.config.controllerAdaptive !== false,
@@ -1321,9 +1336,30 @@ class Sunenergyxt500 extends utils.Adapter {
     );
   }
   /** Maps the current head runtime to the pure HeadState used by the controller and split. */
+  /**
+   * The discharge floor the controller works with, in terms of the head's average SoC.
+   *
+   * The head's own floor (SI) applies to its average. The controller's floor applies to
+   * the emptiest pack instead: the packs drift apart, and the average can still read 10 %
+   * while one pack is already at the head's own cut-off — the point this floor exists to
+   * keep away from. Shifting the floor by the spread expresses that in the average the
+   * rest of the loop uses: `soc <= floor + (soc - emptiest)` holds exactly when the
+   * emptiest pack has reached the floor, and the SI1 band before release shifts with it.
+   *
+   * @param h the head
+   */
+  effectiveSocMin(h) {
+    var _a;
+    const own = (_a = h.socMin) != null ? _a : 0;
+    if (this.controllerMinSoc <= 0 || h.soc === void 0) {
+      return own;
+    }
+    const spread = h.packSocMin === void 0 ? 0 : Math.max(0, h.soc - h.packSocMin);
+    return Math.max(own, this.controllerMinSoc + spread);
+  }
   headStates() {
     return this.heads.map((h) => {
-      var _a, _b, _c, _d, _e, _f, _g, _h;
+      var _a, _b, _c, _d, _e, _f, _g;
       return {
         index: h.index,
         // Deliberately not h.online: that flips on the first missed poll, while a head
@@ -1335,18 +1371,21 @@ class Sunenergyxt500 extends utils.Adapter {
         // included: substituting 0 would invent a floor the device never agreed to.
         controllable: h.soc !== void 0 && h.socMax !== void 0 && h.socMin !== void 0,
         soc: (_b = h.soc) != null ? _b : 0,
-        socMin: (_c = h.socMin) != null ? _c : 0,
-        socMax: (_d = h.socMax) != null ? _d : 100,
+        // The higher of the two floors: the head's own, and the one the controller keeps so
+        // the head never reaches its own cut-off. Everything that acts at the floor — leaving
+        // the discharge split, the SI1 band before release, the IS cap — follows from this.
+        socMin: this.effectiveSocMin(h),
+        socMax: (_c = h.socMax) != null ? _c : 100,
         maxPower: h.maxPower,
         // MG caps the output only. Drawing is documented as -2400..0 for both models,
         // and IS as 1..2400 — the vendor's own integration lowers neither for a 500.
         maxCharge: DEVICE_MAX_W,
         maxInverter: DEVICE_MAX_W,
-        lp: (_e = h.lp) != null ? _e : 0,
-        pv: (_f = h.pv) != null ? _f : 0,
+        lp: (_d = h.lp) != null ? _d : 0,
+        pv: (_e = h.pv) != null ? _e : 0,
         // 5 % is the manufacturer default; assuming none would reintroduce the chatter.
-        socHysteresisDischarge: (_g = h.socHysteresisDischarge) != null ? _g : 5,
-        socHysteresisCharge: (_h = h.socHysteresisCharge) != null ? _h : 5
+        socHysteresisDischarge: (_f = h.socHysteresisDischarge) != null ? _f : 5,
+        socHysteresisCharge: (_g = h.socHysteresisCharge) != null ? _g : 5
       };
     });
   }

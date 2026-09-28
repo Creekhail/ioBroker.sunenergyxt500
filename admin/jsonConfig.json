@@ -326,6 +326,23 @@
 					"tooltip": "0 = zero feed-in. Positive values keep a small deliberate grid draw (never feed in), negative values keep a small deliberate feed-in. Same sign convention as the source state (>0 = draw).",
 					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#control-behaviour-accuracy-and-limits"
 				},
+				"controllerMinSoc": {
+					"type": "number",
+					"label": "Discharge floor of the controller (%)",
+					"min": 0,
+					"max": 100,
+					"step": 1,
+					"default": 0,
+					"help": "The controller stops discharging here, above the head's own floor (0 = off).",
+					"tooltip": "An additional minimum state of charge enforced by the controller itself: once a head reaches it, the controller no longer asks it to discharge, while the head's own floor (SI) stays lower. The head then never reaches its own discharge cut-off. Firmware 1.1.5 can lock up at that cut-off and refuse to charge until it is disconnected from the grid; stopping above it avoids that point. Discharging resumes once the charge has risen by the head's hysteresis (SI1) above this value. Only effective in controller mode; the head's own floor still applies if it is higher. 0 = off.",
+					"helpLink": "https://github.com/Creekhail/ioBroker.sunenergyxt500/blob/main/README.md#configuration",
+					"hidden": "data.controlMode !== 'controller'",
+					"xs": 12,
+					"sm": 6,
+					"md": 3,
+					"lg": 2,
+					"xl": 2
+				},
 				"controllerMaxStepW": {
 					"type": "number",
 					"label": "Max. adjustment per correction (W)",

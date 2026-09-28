@@ -180,6 +180,7 @@
 		"gridPowerInverted": false,
 		"controllerAdaptive": true,
 		"controllerTargetW": 0,
+		"controllerMinSoc": 0,
 		"controllerGain": 0.3,
 		"controllerDeadBandW": 20,
 		"controllerMaxStepW": 500,

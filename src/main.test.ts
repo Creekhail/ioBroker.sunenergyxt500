@@ -3,7 +3,7 @@
  */
 
 import { expect } from 'chai';
-import { asString, errMsg, hostKey, num } from './lib/values';
+import { asString, emptiestPack, errMsg, hostKey, num } from './lib/values';
 import { controllerStateDefs } from './lib/controller';
 import { NAME_TRANSLATIONS } from './lib/name-translations';
 import {
@@ -503,6 +503,25 @@ describe('Tasmota subtype list', () => {
 				expect(dict[subtype], `${file}: ${subtype}`).to.equal(subtype);
 			}
 		}
+	});
+});
+
+describe('emptiestPack', () => {
+	it('finds the lowest connected pack', () => {
+		expect(emptiestPack({ ON: 2, SC0: 23, SC1: 18 })).to.equal(18);
+	});
+
+	it('ignores slots beyond the connected packs', () => {
+		// An empty slot may read 0; taking it as a pack would block discharging for good.
+		expect(emptiestPack({ ON: 2, SC0: 23, SC1: 18, SC2: 0 })).to.equal(18);
+	});
+
+	it('uses what is reported when the pack count is missing', () => {
+		expect(emptiestPack({ SC0: 40, SC1: 35 })).to.equal(35);
+	});
+
+	it('returns undefined without any pack value', () => {
+		expect(emptiestPack({ ON: 2 })).to.equal(undefined);
 	});
 });
 

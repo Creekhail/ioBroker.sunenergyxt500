@@ -140,5 +140,8 @@
 	"Also sets the inverter limit. Only useful with a load on the load port.": "同时设置逆变器限值。仅在负载端口接有负载时有用。",
 	"The storage reads this meter itself (MM=1 + MD) and regulates on its own; the meter stays usable in ioBroker.": "储能自行读取该电表（MM=1 + MD）并自主调节；电表在 ioBroker 中仍可使用。",
 	"Shelly/Tasmota: serial number; EcoTracker: LAN IP.": "Shelly/Tasmota：序列号；EcoTracker：局域网 IP。",
-	"Subtype of your Tasmota / BitShake meter (API reference, section 5.4).": "您的 Tasmota / BitShake 电表子类型（API 参考，第 5.4 节）。"
+	"Subtype of your Tasmota / BitShake meter (API reference, section 5.4).": "您的 Tasmota / BitShake 电表子类型（API 参考，第 5.4 节）。",
+	"Discharge floor of the controller (%)": "调节器放电下限 (%)",
+	"The controller stops discharging here, above the head's own floor (0 = off).": "调节器在此停止放电，高于机组自身下限（0 = 关闭）。",
+	"An additional minimum state of charge enforced by the controller itself: once a head reaches it, the controller no longer asks it to discharge, while the head's own floor (SI) stays lower. The head then never reaches its own discharge cut-off. Firmware 1.1.5 can lock up at that cut-off and refuse to charge until it is disconnected from the grid; stopping above it avoids that point. Discharging resumes once the charge has risen by the head's hysteresis (SI1) above this value. Only effective in controller mode; the head's own floor still applies if it is higher. 0 = off.": "由调节器自身执行的额外最低荷电状态：机组达到该值后，调节器不再要求其放电，而机组自身的下限（SI）保持在更低位置。这样机组永远不会触发自身的放电切断。固件 1.1.5 可能在该切断点卡住，并在断开电网前拒绝充电；在其之上停止可避开这一点。当荷电状态比该值高出机组的滞回（SI1）后，重新允许放电。仅在调节器模式下生效；若机组自身下限更高，则以其为准。0 = 关闭。"
 }

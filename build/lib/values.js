@@ -19,6 +19,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var values_exports = {};
 __export(values_exports, {
   asString: () => asString,
+  emptiestPack: () => emptiestPack,
   errMsg: () => errMsg,
   fallbackMaxPower: () => fallbackMaxPower,
   hostKey: () => hostKey,
@@ -64,9 +65,24 @@ function asString(value) {
 function hostKey(host) {
   return (host || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/+$/, "");
 }
+function emptiestPack(data) {
+  const count = num(data.ON);
+  let min;
+  for (let i = 0; i < 6; i++) {
+    if (count !== void 0 && i >= count) {
+      break;
+    }
+    const v = num(data[`SC${i}`]);
+    if (v !== void 0 && (min === void 0 || v < min)) {
+      min = v;
+    }
+  }
+  return min;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   asString,
+  emptiestPack,
   errMsg,
   fallbackMaxPower,
   hostKey,
